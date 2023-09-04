@@ -33,6 +33,7 @@
 #include "clang/Basic/CodeGenOptions.h"
 #include "clang/Basic/TargetBuiltins.h"
 #include "clang/Basic/TargetInfo.h"
+#include "clang/Basic/Sanitizers.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -40,6 +41,9 @@
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/FPEnv.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/MDBuilder.h"
@@ -790,8 +794,16 @@ void CodeGenFunction::StartFunction(GlobalDecl GD, QualType RetTy,
     const bool SanitizeBounds = SanOpts.hasOneOf(SanitizerKind::Bounds);
     SanitizerMask no_sanitize_mask;
     bool NoSanitizeCoverage = false;
+    bool NoSanitizeRealtime = false;
 
     for (auto *Attr : D->specific_attrs<NoSanitizeAttr>()) {
+      // The realtime sanitizer is not handled by SanOpts
+      // if it is enabled, it should remain enabled
+      if (Attr->hasRealtime()) {
+        NoSanitizeRealtime = true;
+        continue;
+      }
+
       no_sanitize_mask |= Attr->getMask();
       // SanitizeCoverage is not handled by SanOpts.
       if (Attr->hasCoverage())
@@ -808,6 +820,11 @@ void CodeGenFunction::StartFunction(GlobalDecl GD, QualType RetTy,
       SanOpts.set(SanitizerKind::KernelHWAddress, false);
     if (no_sanitize_mask & SanitizerKind::KernelHWAddress)
       SanOpts.set(SanitizerKind::HWAddress, false);
+
+    if (NoSanitizeRealtime)
+    {
+      Fn->addFnAttr(llvm::Attribute::NoSanitizeRealtime);
+    }
 
     if (SanitizeBounds && !SanOpts.hasOneOf(SanitizerKind::Bounds))
       Fn->addFnAttr(llvm::Attribute::NoSanitizeBounds);
@@ -1410,6 +1427,38 @@ QualType CodeGenFunction::BuildFunctionArgList(GlobalDecl GD,
   return ResTy;
 }
 
+namespace {
+
+void InsertRadsanFunctionCallBeforeInstruction(llvm::Function *Fn,
+                                              llvm::Instruction &instruction,
+                                              std::string const &functionName) {
+  auto &context = Fn->getContext();
+  auto *funcType =
+      llvm::FunctionType::get(llvm::Type::getVoidTy(context), false);
+  auto func = Fn->getParent()->getOrInsertFunction(functionName, funcType);
+  llvm::IRBuilder<> builder{&instruction};
+  builder.CreateCall(func, {});
+}
+
+void insertCallAtFunctionEntryPoint(llvm::Function *Fn, std::string const &InsertFnName) {
+
+  InsertRadsanFunctionCallBeforeInstruction(Fn, Fn->front().front(),
+                                            InsertFnName);
+}
+
+void insertCallAtAllFunctionExitPoints(llvm::Function *Fn, std::string const &InsertFnName) {
+  for (auto &bb : *Fn) {
+    for (auto &i : bb) {
+      if (auto *ri = dyn_cast<llvm::ReturnInst>(&i)) {
+        InsertRadsanFunctionCallBeforeInstruction(Fn, i,
+                                                  InsertFnName);
+      }
+    }
+  }
+}
+
+} // namespace
+
 void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
                                    const CGFunctionInfo &FnInfo) {
   assert(Fn && "generating code for null Function");
@@ -1578,8 +1627,28 @@ void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
     }
   }
 
+  if (SanOpts.has(SanitizerKind::Realtime)) {
+    if (Fn->hasFnAttribute(llvm::Attribute::NoSanitizeRealtime)) {
+      insertCallAtFunctionEntryPoint(Fn, "radsan_off");
+    }
+
+    if (Fn->hasFnAttribute(llvm::Attribute::Realtime)) {
+      insertCallAtFunctionEntryPoint(Fn, "radsan_realtime_enter");
+    }
+  }
+
   // Emit the standard function epilogue.
   FinishFunction(BodyRange.getEnd());
+
+  if (SanOpts.has(SanitizerKind::Realtime)) {
+    if (Fn->hasFnAttribute(llvm::Attribute::NoSanitizeRealtime)) {
+      insertCallAtAllFunctionExitPoints(Fn, "radsan_on");
+    }
+
+    if (Fn->hasFnAttribute(llvm::Attribute::Realtime)) {
+      insertCallAtAllFunctionExitPoints(Fn, "radsan_realtime_exit");
+    }
+  }
 
   // If we haven't marked the function nothrow through other means, do
   // a quick pass now to see if we can.

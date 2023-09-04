@@ -1294,6 +1294,15 @@ def Const : InheritableAttr {
   let SimpleHandler = 1;
 }
 
+def Realtime : InheritableAttr {
+  let Spellings = [CXX11<"clang", "realtime">, 
+                   C23<"clang", "realtime">,
+                   GCC<"realtime">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [Undocumented];
+  let SimpleHandler = 1;
+}
+
 def ConstInit : InheritableAttr {
   // This attribute does not have a C [[]] spelling because it requires the
   // CPlusPlus language option.
@@ -3527,6 +3536,11 @@ def NoSanitize : InheritableAttr {
     bool hasCoverage() const {
       return llvm::is_contained(sanitizers(), "coverage");
     }
+
+    bool hasRealtime() const {
+      return llvm::is_contained(sanitizers(), "realtime");
+    }
+
   }];
 }
 
