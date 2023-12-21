@@ -17,7 +17,16 @@
 // Test fixture that calls ENSURE_RADSAN_INITED before each test
 class TestRadsanContext : public ::testing::Test {
 protected:
-  void SetUp() override { radsan::EnsureInitialized(); }
+  void SetUp() override { 
+    radsan::EnsureInitialized(); 
+  }
+
+  void TearDown() override { 
+    // Because we mess with the guts of radsan, and we are actually running with it linked
+    // Despite all tests "passing" we exit this process non-zero because the reports are zero
+    // Reset to avoid that issue
+    radsan::ResetReportCount(); 
+  }
 };
 
 TEST_F(TestRadsanContext, canCreateContext) { 

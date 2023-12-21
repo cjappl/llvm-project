@@ -47,7 +47,11 @@ __sanitizer::u64 GetReportCount() {
 }
 
 void IncrementReportCount() { 
-  __sanitizer::atomic_fetch_add(&radsan_report_count, 1, memory_order_relaxed); 
+  __sanitizer::atomic_fetch_add(&radsan_report_count, 1, __sanitizer::memory_order_acq_rel); 
+}
+
+void ResetReportCount() { 
+  __sanitizer::atomic_store(&radsan_report_count, 0, memory_order_release); 
 }
 
 
@@ -102,6 +106,28 @@ static void initializeFlags() {
   }
 }
 
+void ReportAtExitStatistics() {
+  ScopedErrorReportLock l;
+
+  __sanitizer::u64 Reports = GetReportCount();
+  if (Reports > 0) {
+    const char* warning = Reports == 1 ? "warning" : "warnings";
+    Printf("RealtimeSanitizer: %llu %s reported.\n", GetReportCount(), warning);
+  }
+}
+
+void RadsanAtExit(void) {
+  if (GetReportCount() > 0) {
+    ReportAtExitStatistics();
+    if (common_flags()->exitcode)
+      internal__exit(common_flags()->exitcode);
+  }
+}
+
+void InstallAtExitHandler() {
+  atexit(RadsanAtExit);
+}
+
 void radsan_init() {
   using namespace radsan;
 
@@ -116,6 +142,7 @@ void radsan_init() {
 
   initializeFlags();
   initialiseInterceptors(); 
+  InstallAtExitHandler(); 
 
   __sanitizer::atomic_store(&radsan_inited, 1, memory_order_release);
   __sanitizer::atomic_store(&radsan_init_is_running, 0, memory_order_relaxed);

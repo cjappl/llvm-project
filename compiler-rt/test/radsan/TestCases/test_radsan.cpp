@@ -16,4 +16,5 @@ int main() {
   return 0;
   // CHECK: {{.*Real-time violation.*}}
   // CHECK: {{.*malloc*}}
+  // CHECK: {{.*RealtimeSanitizer: 1 warning reported.*}}
 }
