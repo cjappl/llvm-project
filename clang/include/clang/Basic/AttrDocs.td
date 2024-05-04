@@ -8065,7 +8065,7 @@ requirement:
   }];
 }
 
-def DocCatNonBlockingNonAllocating : DocumentationCategory<"Performance constraint attributes"> {
+def DocCatNonBlockingNonAllocating : DocumentationCategory<"Performance Constraint Attributes"> {
   let Content = [{
 The ``nonblocking``, ``blocking``, ``nonallocating`` and ``allocating`` attributes can be attached 
 to function types, including blocks, C++ lambdas, and member functions. The attributes declare
@@ -8084,6 +8084,8 @@ compiler warnings:
 
 - A redeclaration of a ``nonblocking`` or ``nonallocating`` function must also be declared with
   the same attribute (or a stronger one). A redeclaration may add an attribute.
+
+The warnings are controlled by ``-Wfunction-effects``, which is enabled by default.
 
 In a future commit, the compiler will diagnose function calls from ``nonblocking`` and ``nonallocating``
 functions to other functions which lack the appropriate attribute.
