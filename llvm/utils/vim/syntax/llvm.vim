@@ -139,9 +139,9 @@ syn keyword llvmKeyword
       \ nosync
       \ noundef
       \ nounwind
+      \ nonblocking
       \ nosanitize_bounds
       \ nosanitize_coverage
-      \ nosanitize_realtime
       \ null_pointer_is_valid
       \ optdebug
       \ optforfuzzing

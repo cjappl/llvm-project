@@ -785,8 +785,6 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
     return bitc::ATTR_KIND_OPTIMIZE_NONE;
   case Attribute::NonBlocking:
     return bitc::ATTR_KIND_NONBLOCKING;
-  case Attribute::NoSanitizeRealtime:
-    return bitc::ATTR_KIND_NO_SANITIZE_REALTIME;
   case Attribute::ReadNone:
     return bitc::ATTR_KIND_READ_NONE;
   case Attribute::ReadOnly:

@@ -771,16 +771,8 @@ void CodeGenFunction::StartFunction(GlobalDecl GD, QualType RetTy,
     const bool SanitizeBounds = SanOpts.hasOneOf(SanitizerKind::Bounds);
     SanitizerMask no_sanitize_mask;
     bool NoSanitizeCoverage = false;
-    bool NoSanitizeRealtime = false;
 
     for (auto *Attr : D->specific_attrs<NoSanitizeAttr>()) {
-      // The realtime sanitizer is not handled by SanOpts
-      // if it is enabled, it should remain enabled
-      if (Attr->hasRealtime()) {
-        NoSanitizeRealtime = true;
-        continue;
-      }
-
       no_sanitize_mask |= Attr->getMask();
       // SanitizeCoverage is not handled by SanOpts.
       if (Attr->hasCoverage())
@@ -797,11 +789,6 @@ void CodeGenFunction::StartFunction(GlobalDecl GD, QualType RetTy,
       SanOpts.set(SanitizerKind::KernelHWAddress, false);
     if (no_sanitize_mask & SanitizerKind::KernelHWAddress)
       SanOpts.set(SanitizerKind::HWAddress, false);
-
-    if (NoSanitizeRealtime)
-    {
-      Fn->addFnAttr(llvm::Attribute::NoSanitizeRealtime);
-    }
 
     if (SanitizeBounds && !SanOpts.hasOneOf(SanitizerKind::Bounds))
       Fn->addFnAttr(llvm::Attribute::NoSanitizeBounds);
@@ -1588,10 +1575,6 @@ void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
   }
 
   if (SanOpts.has(SanitizerKind::Realtime)) {
-    if (Fn->hasFnAttribute(llvm::Attribute::NoSanitizeRealtime)) {
-      insertCallAtFunctionEntryPoint(Fn, "radsan_off");
-    }
-
     if (Fn->hasFnAttribute(llvm::Attribute::NonBlocking)) {
       insertCallAtFunctionEntryPoint(Fn, "radsan_realtime_enter");
     }
@@ -1601,10 +1584,6 @@ void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
   FinishFunction(BodyRange.getEnd());
 
   if (SanOpts.has(SanitizerKind::Realtime)) {
-    if (Fn->hasFnAttribute(llvm::Attribute::NoSanitizeRealtime)) {
-      insertCallAtAllFunctionExitPoints(Fn, "radsan_on");
-    }
-
     if (Fn->hasFnAttribute(llvm::Attribute::NonBlocking)) {
       insertCallAtAllFunctionExitPoints(Fn, "radsan_realtime_exit");
     }
