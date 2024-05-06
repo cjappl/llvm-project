@@ -18389,7 +18389,8 @@ bool Sema::CheckOverridingFunctionAttributes(CXXMethodDecl *New,
 
   if (OldFX != NewFXOrig) {
     FunctionEffectSet NewFX(NewFXOrig);
-    const auto Diffs = FunctionEffectSet::differences(OldFX, NewFX);
+    const auto Diffs = FunctionEffectDifferences(OldFX, NewFX);
+    FunctionEffectSet::Conflicts Errs;
     for (const auto &Diff : Diffs) {
       switch (Diff.shouldDiagnoseMethodOverride(*Old, OldFX, *New, NewFX)) {
       case FunctionEffectDiff::OverrideResult::NoAction:
@@ -18401,7 +18402,7 @@ bool Sema::CheckOverridingFunctionAttributes(CXXMethodDecl *New,
             << Old->getReturnTypeSourceRange();
         break;
       case FunctionEffectDiff::OverrideResult::Merge: {
-        NewFX.insert(Diff.Old.Effect, Diff.Old.Cond.expr());
+        NewFX.insert(Diff.Old, Errs);
         const auto *NewFT = New->getType()->castAs<FunctionProtoType>();
         FunctionProtoType::ExtProtoInfo EPI = NewFT->getExtProtoInfo();
         EPI.FunctionEffects = FunctionEffectsRef(NewFX);
@@ -18412,6 +18413,9 @@ bool Sema::CheckOverridingFunctionAttributes(CXXMethodDecl *New,
       }
       }
     }
+    if (!Errs.empty())
+      diagnoseFunctionEffectMergeConflicts(Errs, New->getLocation(),
+                                           Old->getLocation());
   }
 
   CallingConv NewCC = NewFT->getCallConv(), OldCC = OldFT->getCallConv();
