@@ -2405,13 +2405,8 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
         NBA = Fn->getAttr<NoBuiltinAttr>();
       }
 
-      const FunctionEffectsRef FunctionEffects = Fn->getFunctionEffects();
-      for(size_t i = 0; i < FunctionEffects.size(); i++)
-      {
-        // TODO: Handle the case where "Blocking" is the effect with condition "False"
-        // How do conditions/expressions work ??? 
-        if(FunctionEffects.effects()[i].kind() == FunctionEffect::Kind::NonBlocking)
-        {
+      for (const FunctionEffectWithCondition& Fe : Fn->getFunctionEffects()) {
+        if (Fe.Effect.kind() == FunctionEffect::Kind::NonBlocking) {
           FuncAttrs.addAttribute(llvm::Attribute::NonBlocking);
         }
       }
