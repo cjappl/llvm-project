@@ -86,36 +86,33 @@ void type_conversions_2()
 #endif
 
 // --- VIRTUAL METHODS ---
-// Attributes propagate to overridden methods, so no diagnostics.
+// Attributes propagate to overridden methods, so no diagnostics except for conflicts.
 // Check this in the syntax tests too.
 #ifdef __cplusplus
 struct Base {
 	virtual void f1();
 	virtual void nonblocking() noexcept [[clang::nonblocking]];
 	virtual void nonallocating() noexcept [[clang::nonallocating]];
+	virtual void f2() [[clang::nonallocating]]; // expected-note {{previous declaration is here}}
 };
 
 struct Derived : public Base {
 	void f1() [[clang::nonblocking]] override;
 	void nonblocking() noexcept override;
 	void nonallocating() noexcept override;
+	void f2() [[clang::allocating]] override; // expected-warning {{effects conflict when merging declarations; kept 'allocating', discarded 'nonallocating'}}
 };
 #endif // __cplusplus
 
 // --- REDECLARATIONS ---
 
-#ifdef __cplusplus
-// In C++, the third declaration gets seen as a redeclaration of the second.
 void f2();
 void f2() [[clang::nonblocking]]; // expected-note {{previous declaration is here}}
 void f2(); // expected-warning {{attribute 'nonblocking' on function does not match previous declaration}}
-#else
-// In C, the third declaration is redeclaration of the first (?).
-void f2();
-void f2() [[clang::nonblocking]];
-void f2();
-#endif
 // Note: we verify that the attribute is actually seen during the constraints tests.
+
+void f3() [[clang::blocking]]; // expected-note {{previous declaration is here}}
+void f3() [[clang::nonblocking]]; // expected-warning {{effects conflict when merging declarations; kept 'blocking', discarded 'nonblocking'}}
 
 // --- OVERLOADS ---
 #ifdef __cplusplus

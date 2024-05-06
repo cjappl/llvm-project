@@ -31,6 +31,7 @@
 #include "clang/Sema/DeclSpec.h"
 #include "clang/Sema/DelayedDiagnostic.h"
 #include "clang/Sema/Lookup.h"
+#include "clang/Sema/ParsedAttr.h"
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/SemaCUDA.h"
@@ -7967,32 +7968,24 @@ static Attr *getCCTypeAttr(ASTContext &Ctx, ParsedAttr &Attr) {
   llvm_unreachable("unexpected attribute kind!");
 }
 
-ExprResult Sema::ActOnEffectExpression(Expr *CondExpr, FunctionEffectMode &Mode,
-                                       bool RequireConstexpr) {
-  // see checkFunctionConditionAttr, Sema::CheckCXXBooleanCondition
-  if (RequireConstexpr || !CondExpr->isTypeDependent()) {
-    ExprResult E = PerformContextuallyConvertToBool(CondExpr);
-    if (E.isInvalid())
-      return E;
-    CondExpr = E.get();
-    if (RequireConstexpr || !CondExpr->isValueDependent()) {
-      llvm::APSInt CondInt;
-      E = VerifyIntegerConstantExpression(
-          E.get(), &CondInt,
-          // TODO: have our own diagnostic
-          diag::err_constexpr_if_condition_expression_is_not_constant);
-      if (E.isInvalid()) {
-        return E;
-      }
-      Mode =
-          (CondInt != 0) ? FunctionEffectMode::True : FunctionEffectMode::False;
-    } else {
-      Mode = FunctionEffectMode::Dependent;
-    }
-  } else {
+ExprResult Sema::ActOnEffectExpression(Expr *CondExpr, StringRef AttributeName,
+                                       FunctionEffectMode &Mode) {
+  if (CondExpr->isTypeDependent() || CondExpr->isValueDependent()) {
     Mode = FunctionEffectMode::Dependent;
+    return CondExpr;
   }
-  return CondExpr;
+
+  std::optional<llvm::APSInt> ConditionValue =
+      CondExpr->getIntegerConstantExpr(Context);
+  if (!ConditionValue) {
+    Diag(CondExpr->getExprLoc(), diag::err_attribute_argument_type)
+        << AttributeName << AANT_ArgumentIntegerConstant
+        << CondExpr->getSourceRange();
+    return ExprResult(/*invalid=*/true);
+  }
+  Mode = ConditionValue->getExtValue() ? FunctionEffectMode::True
+                                       : FunctionEffectMode::False;
+  return ExprResult(static_cast<Expr *>(nullptr));
 }
 
 static bool
@@ -8007,12 +8000,12 @@ handleNonBlockingNonAllocatingTypeAttr(TypeProcessingState &TPState,
   auto *FPT = Unwrapped.get()->getAs<FunctionProtoType>();
   if (FPT == nullptr) {
     // TODO: special diagnostic?
-    return false;
+    return true;
   }
 
   // Parse the new  attribute.
   // non/blocking or non/allocating? Or conditional (computed)?
-  const bool isNonBlocking = PAttr.getKind() == ParsedAttr::AT_NonBlocking ||
+  const bool IsNonBlocking = PAttr.getKind() == ParsedAttr::AT_NonBlocking ||
                              PAttr.getKind() == ParsedAttr::AT_Blocking;
   Sema &S = TPState.getSema();
 
@@ -8026,34 +8019,39 @@ handleNonBlockingNonAllocatingTypeAttr(TypeProcessingState &TPState,
       return true;
     }
 
-    // Parse the conditional expression, if any
+    // Parse the condition, if any
     if (PAttr.getNumArgs() == 1) {
       CondExpr = PAttr.getArgAsExpr(0);
-      ExprResult E = S.ActOnEffectExpression(CondExpr, NewMode);
-      if (E.isInvalid())
-        return false;
+      ExprResult E = S.ActOnEffectExpression(
+          CondExpr, PAttr.getAttrName()->getName(), NewMode);
+      if (E.isInvalid()) {
+        PAttr.setInvalid();
+        return true;
+      }
       CondExpr = NewMode == FunctionEffectMode::Dependent ? E.get() : nullptr;
     } else {
       NewMode = FunctionEffectMode::True;
     }
   } else {
     // This is the `blocking` or `allocating` attribute.
-    if (S.CheckAttrNoArgs(PAttr))
+    if (S.CheckAttrNoArgs(PAttr)) {
+      // The attribute has been marked invalid.
       return true;
+    }
     NewMode = FunctionEffectMode::False;
   }
 
   const FunctionEffect::Kind FEKind =
       (NewMode == FunctionEffectMode::False)
-          ? (isNonBlocking ? FunctionEffect::Kind::Blocking
+          ? (IsNonBlocking ? FunctionEffect::Kind::Blocking
                            : FunctionEffect::Kind::Allocating)
-          : (isNonBlocking ? FunctionEffect::Kind::NonBlocking
+          : (IsNonBlocking ? FunctionEffect::Kind::NonBlocking
                            : FunctionEffect::Kind::NonAllocating);
   const FunctionEffectWithCondition NewEC{FunctionEffect(FEKind),
                                           FunctionEffectCondition(CondExpr)};
 
-  // Diagnose the newly provided attribute as incompatible with a previous one.
-  auto incompatible = [&](const FunctionEffectWithCondition &PrevEC) {
+  // Diagnose the newly parsed attribute as incompatible with a previous one.
+  auto Incompatible = [&](const FunctionEffectWithCondition &PrevEC) {
     S.Diag(PAttr.getLoc(), diag::err_attributes_are_not_compatible)
         << ("'" + NewEC.description() + "'")
         << ("'" + PrevEC.description() + "'") << false;
@@ -8070,7 +8068,7 @@ handleNonBlockingNonAllocatingTypeAttr(TypeProcessingState &TPState,
   for (const FunctionEffectWithCondition &PrevEC : FPT->getFunctionEffects()) {
     if (PrevEC.Effect.kind() == FEKind ||
         PrevEC.Effect.oppositeKind() == FEKind)
-      return incompatible(PrevEC);
+      return Incompatible(PrevEC);
     switch (PrevEC.Effect.kind()) {
     case FunctionEffect::Kind::Blocking:
     case FunctionEffect::Kind::NonBlocking:
@@ -8085,27 +8083,29 @@ handleNonBlockingNonAllocatingTypeAttr(TypeProcessingState &TPState,
     }
   }
 
-  if (isNonBlocking) {
+  if (IsNonBlocking) {
     // new nonblocking(true) is incompatible with previous allocating
     if (NewMode == FunctionEffectMode::True && PrevNonAllocating &&
         PrevNonAllocating->Effect.kind() == FunctionEffect::Kind::Allocating)
-      return incompatible(*PrevNonAllocating);
+      return Incompatible(*PrevNonAllocating);
   } else {
     // new allocating is incompatible with previous nonblocking(true)
     if (NewMode == FunctionEffectMode::False && PrevNonBlocking &&
         PrevNonBlocking->Effect.kind() == FunctionEffect::Kind::NonBlocking)
-      return incompatible(*PrevNonBlocking);
+      return Incompatible(*PrevNonBlocking);
   }
 
   // Add the effect to the FunctionProtoType
   FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
   FunctionEffectSet FX(EPI.FunctionEffects);
-  FX.insert(NewEC.Effect, NewEC.Cond.expr());
+  FunctionEffectSet::Conflicts Errs;
+  FX.insert(NewEC, Errs);
+  assert(Errs.empty() && "effect conflicts should have been diagnosed above");
   EPI.FunctionEffects = FunctionEffectsRef(FX);
 
-  QualType newtype = S.Context.getFunctionType(FPT->getReturnType(),
+  QualType NewType = S.Context.getFunctionType(FPT->getReturnType(),
                                                FPT->getParamTypes(), EPI);
-  QT = Unwrapped.wrap(S, newtype->getAs<FunctionType>());
+  QT = Unwrapped.wrap(S, NewType->getAs<FunctionType>());
   return true;
 }
 

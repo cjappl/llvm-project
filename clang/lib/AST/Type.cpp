@@ -3652,19 +3652,29 @@ FunctionProtoType::FunctionProtoType(QualType result, ArrayRef<QualType> params,
 
   if (!epi.FunctionEffects.empty()) {
     auto &ExtraBits = *getTrailingObjects<FunctionTypeExtraBitfields>();
-    // TODO: bitfield overflow?
-    ExtraBits.NumFunctionEffects = epi.FunctionEffects.size();
+    const size_t EffectsCount = epi.FunctionEffects.size();
+    ExtraBits.NumFunctionEffects = EffectsCount;
+    assert(ExtraBits.NumFunctionEffects == EffectsCount &&
+           "effect bitfield overflow");
 
     ArrayRef<FunctionEffect> SrcFX = epi.FunctionEffects.effects();
     auto *DestFX = getTrailingObjects<FunctionEffect>();
-    std::copy(SrcFX.begin(), SrcFX.end(), DestFX);
+    std::uninitialized_copy(SrcFX.begin(), SrcFX.end(), DestFX);
 
     ArrayRef<FunctionEffectCondition> SrcConds =
         epi.FunctionEffects.conditions();
     if (!SrcConds.empty()) {
       ExtraBits.EffectsHaveConditions = true;
       auto *DestConds = getTrailingObjects<FunctionEffectCondition>();
-      std::copy(SrcConds.begin(), SrcConds.end(), DestConds);
+      std::uninitialized_copy(SrcConds.begin(), SrcConds.end(), DestConds);
+      assert(std::any_of(SrcConds.begin(), SrcConds.end(),
+                         [](const FunctionEffectCondition &EC) {
+                           if (const Expr *E = EC.expr())
+                             return E->isTypeDependent() ||
+                                    E->isValueDependent();
+                           return false;
+                         }) &&
+             "expected a dependent expression among the conditions");
       addDependence(TypeDependence::DependentInstantiation);
     }
   }
@@ -5083,98 +5093,6 @@ StringRef FunctionEffect::name() const {
   llvm_unreachable("unknown effect kind");
 }
 
-bool FunctionEffectDiff::shouldDiagnoseConversion(
-    QualType SrcType, const FunctionEffectsRef &SrcFX, QualType DstType,
-    const FunctionEffectsRef &DstFX) const {
-
-  switch (EffectKind) {
-  case FunctionEffect::Kind::NonAllocating:
-    // nonallocating can't be added (spoofed) during a conversion, unless we
-    // have nonblocking
-    if (DiffKind == Kind::Added) {
-      for (const auto &CFE : SrcFX) {
-        if (CFE.Effect.kind() == FunctionEffect::Kind::NonBlocking)
-          return false;
-      }
-    }
-    [[fallthrough]];
-  case FunctionEffect::Kind::NonBlocking:
-    // nonblocking can't be added (spoofed) during a conversion.
-    switch (DiffKind) {
-    case Kind::Added:
-      return true;
-    case Kind::Removed:
-      return false;
-    case Kind::ConditionMismatch:
-      return true; // TODO: ???
-    }
-  case FunctionEffect::Kind::Blocking:
-  case FunctionEffect::Kind::Allocating:
-    return false;
-  case FunctionEffect::Kind::None:
-    break;
-  }
-  llvm_unreachable("unknown effect kind");
-}
-
-bool FunctionEffectDiff::shouldDiagnoseRedeclaration(
-    const FunctionDecl &OldFunction, const FunctionEffectsRef &OldFX,
-    const FunctionDecl &NewFunction, const FunctionEffectsRef &NewFX) const {
-  switch (EffectKind) {
-  case FunctionEffect::Kind::NonAllocating:
-  case FunctionEffect::Kind::NonBlocking:
-    // nonblocking/nonallocating can't be removed in a redeclaration
-    switch (DiffKind) {
-    case Kind::Added:
-      return false; // No diagnostic.
-    case Kind::Removed:
-      return true; // Issue diagnostic
-    case Kind::ConditionMismatch:
-      // All these forms of mismatches are diagnosed.
-      return true;
-    }
-  case FunctionEffect::Kind::Blocking:
-  case FunctionEffect::Kind::Allocating:
-    return false;
-  case FunctionEffect::Kind::None:
-    break;
-  }
-  llvm_unreachable("unknown effect kind");
-}
-
-FunctionEffectDiff::OverrideResult
-FunctionEffectDiff::shouldDiagnoseMethodOverride(
-    const CXXMethodDecl &OldMethod, const FunctionEffectsRef &OldFX,
-    const CXXMethodDecl &NewMethod, const FunctionEffectsRef &NewFX) const {
-  switch (EffectKind) {
-  case FunctionEffect::Kind::NonAllocating:
-  case FunctionEffect::Kind::NonBlocking:
-    switch (DiffKind) {
-
-    // If added on an override, that's fine and not diagnosed.
-    case Kind::Added:
-      return OverrideResult::NoAction;
-
-    // If missing from an override (removed), propagate from base to derived.
-    case Kind::Removed:
-      return OverrideResult::Merge;
-
-    // If there's a mismatch involving the effect's polarity or condition,
-    // issue a warning.
-    case Kind::ConditionMismatch:
-      return OverrideResult::Warn;
-    }
-
-  case FunctionEffect::Kind::Blocking:
-  case FunctionEffect::Kind::Allocating:
-    return OverrideResult::NoAction;
-
-  case FunctionEffect::Kind::None:
-    break;
-  }
-  llvm_unreachable("unknown effect kind");
-}
-
 bool FunctionEffect::canInferOnFunction(const Decl &Callee) const {
   switch (kind()) {
   case Kind::NonAllocating:
@@ -5246,38 +5164,49 @@ void FunctionEffectsRef::Profile(llvm::FoldingSetNodeID &ID) const {
   }
 }
 
-void FunctionEffectSet::insert(FunctionEffect Effect, Expr *Cond) {
-  // lower_bound would be overkill
+void FunctionEffectSet::insert(const FunctionEffectWithCondition &NewEC,
+                               Conflicts &Errs) {
+  const FunctionEffect::Kind NewOppositeKind = NewEC.Effect.oppositeKind();
+
+  // The index at which insertion will take place; default is at end
+  // but we might find an earlier insertion point.
+  unsigned InsertIdx = Effects.size();
   unsigned Idx = 0;
-  for (unsigned Count = Effects.size(); Idx != Count; ++Idx) {
-    const auto &IterEffect = Effects[Idx];
-    if (IterEffect.kind() == Effect.kind()) {
-      // It's possible here to have incompatible combinations of polarity
-      // (asserted/denied) and condition; for now, we keep whichever came
-      // though this should be improved.
+  for (const FunctionEffectWithCondition &EC : *this) {
+    if (EC.Effect.kind() == NewEC.Effect.kind()) {
+      if (Conditions[Idx].expr() != NewEC.Cond.expr())
+        Errs.push_back({EC, NewEC});
       return;
     }
-    if (Effect.kind() < IterEffect.kind())
-      break;
+
+    if (EC.Effect.kind() == NewOppositeKind) {
+      Errs.push_back({EC, NewEC});
+      return;
+    }
+
+    if (NewEC.Effect.kind() < EC.Effect.kind() && InsertIdx > Idx)
+      InsertIdx = Idx;
+
+    ++Idx;
   }
 
-  if (Cond) {
+  if (NewEC.Cond.expr()) {
     if (Conditions.empty() && !Effects.empty())
       Conditions.resize(Effects.size());
-    Conditions.insert(Conditions.begin() + Idx, Cond);
+    Conditions.insert(Conditions.begin() + InsertIdx, NewEC.Cond.expr());
   }
-  Effects.insert(Effects.begin() + Idx, Effect);
+  Effects.insert(Effects.begin() + InsertIdx, NewEC.Effect);
 }
 
-void FunctionEffectSet::insert(const FunctionEffectsRef &Set) {
+void FunctionEffectSet::insert(const FunctionEffectsRef &Set, Conflicts &Errs) {
   for (const auto &Item : Set)
-    insert(Item.Effect, Item.Cond.expr());
+    insert(Item, Errs);
 }
 
-void FunctionEffectSet::insertIgnoringConditions(
-    const FunctionEffectsRef &Set) {
+void FunctionEffectSet::insertIgnoringConditions(const FunctionEffectsRef &Set,
+                                                 Conflicts &Errs) {
   for (const auto &Item : Set)
-    insert(Item.Effect, nullptr);
+    insert(FunctionEffectWithCondition(Item.Effect, {}), Errs);
 }
 
 void FunctionEffectSet::replaceItem(unsigned Idx,
@@ -5304,73 +5233,46 @@ void FunctionEffectSet::erase(unsigned Idx) {
   }
 }
 
+FunctionEffectSet FunctionEffectSet::getIntersection(FunctionEffectsRef LHS,
+                                                     FunctionEffectsRef RHS) {
+  FunctionEffectSet Result;
+  FunctionEffectSet::Conflicts Errs;
+
+  // We could use std::set_intersection but that would require expanding the
+  // container interface to include push_back, making it available to clients
+  // who might fail to maintain invariants.
+  auto IterA = LHS.begin(), EndA = LHS.end();
+  auto IterB = RHS.begin(), EndB = RHS.end();
+
+  while (IterA != EndA && IterB != EndB) {
+    if (*IterA < *IterB)
+      ++IterA;
+    else if (*IterB < *IterA)
+      ++IterB;
+    else {
+      Result.insert(*IterA, Errs);
+      ++IterA;
+      ++IterB;
+    }
+  }
+
+  // Insertion shouldn't be able to fail; that would mean both input
+  // sets contained conflicts.
+  assert(Errs.empty() && "conflict shouldn't be possible in getIntersection");
+
+  return Result;
+}
+
 FunctionEffectSet FunctionEffectSet::getUnion(FunctionEffectsRef LHS,
-                                              FunctionEffectsRef RHS) {
+                                              FunctionEffectsRef RHS,
+                                              Conflicts &Errs) {
   // Optimize for either of the two sets being empty (very common).
   if (LHS.empty())
     return FunctionEffectSet(RHS);
 
-  FunctionEffectSet Result(LHS);
-  Result.insert(RHS);
-  return Result;
-}
-
-FunctionEffectSet::Differences
-FunctionEffectSet::differences(const FunctionEffectsRef &Old,
-                               const FunctionEffectsRef &New) {
-
-  FunctionEffectSet::Differences Result;
-
-  FunctionEffectsRef::iterator POld = Old.begin();
-  FunctionEffectsRef::iterator OldEnd = Old.end();
-  FunctionEffectsRef::iterator PNew = New.begin();
-  FunctionEffectsRef::iterator NewEnd = New.end();
-
-  while (true) {
-    int cmp = 0;
-    if (POld == OldEnd) {
-      if (PNew == NewEnd)
-        break;
-      cmp = 1;
-    } else if (PNew == NewEnd)
-      cmp = -1;
-    else {
-      FunctionEffectWithCondition Old = *POld;
-      FunctionEffectWithCondition New = *PNew;
-      if (Old.Effect.kind() < New.Effect.kind())
-        cmp = -1;
-      else if (New.Effect.kind() < Old.Effect.kind())
-        cmp = 1;
-      else {
-        cmp = 0;
-        if (Old.Cond.expr() != New.Cond.expr()) {
-          // TODO: Cases where the expressions are equivalent but
-          // don't have the same identity.
-          Result.push_back(FunctionEffectDiff{
-              Old.Effect.kind(), FunctionEffectDiff::Kind::ConditionMismatch,
-              Old, New});
-        }
-      }
-    }
-
-    if (cmp < 0) {
-      // removal
-      FunctionEffectWithCondition Old = *POld;
-      Result.push_back(FunctionEffectDiff{
-          Old.Effect.kind(), FunctionEffectDiff::Kind::Removed, Old, {}});
-      ++POld;
-    } else if (cmp > 0) {
-      // addition
-      FunctionEffectWithCondition New = *PNew;
-      Result.push_back(FunctionEffectDiff{
-          New.Effect.kind(), FunctionEffectDiff::Kind::Added, {}, New});
-      ++PNew;
-    } else {
-      ++POld;
-      ++PNew;
-    }
-  }
-  return Result;
+  FunctionEffectSet Combined(LHS);
+  Combined.insert(RHS, Errs);
+  return Combined;
 }
 
 LLVM_DUMP_METHOD void FunctionEffectsRef::dump(llvm::raw_ostream &OS) const {
@@ -5395,26 +5297,21 @@ LLVM_DUMP_METHOD void FunctionEffectSet::dump(llvm::raw_ostream &OS) const {
   FunctionEffectsRef(*this).dump(OS);
 }
 
-// TODO: inline?
 FunctionEffectsRef FunctionEffectsRef::get(QualType QT) {
-  if (QT->isReferenceType())
-    QT = QT.getNonReferenceType();
-  if (QT->isPointerType())
-    QT = QT->getPointeeType();
-
-  // TODO: Why aren't these included in isPointerType()?
-  if (const auto *BT = QT->getAs<BlockPointerType>()) {
-    QT = BT->getPointeeType();
-  } else if (const auto *MP = QT->getAs<MemberPointerType>()) {
-    if (MP->isMemberFunctionPointer()) {
-      QT = MP->getPointeeType();
-    }
-  }
-
+  if (QualType Pointee = QT->getPointeeType(); !Pointee.isNull())
+    QT = Pointee;
   if (const auto *FPT = QT->getAs<FunctionProtoType>())
     return FPT->getFunctionEffects();
-
   return {};
+}
+
+FunctionEffectsRef
+FunctionEffectsRef::create(ArrayRef<FunctionEffect> FX,
+                           ArrayRef<FunctionEffectCondition> Conds) {
+  assert(std::is_sorted(FX.begin(), FX.end()) && "effects should be sorted");
+  assert((Conds.empty() || Conds.size() == FX.size()) &&
+         "effects size should match conditions size");
+  return FunctionEffectsRef(FX, Conds);
 }
 
 std::string FunctionEffectWithCondition::description() const {

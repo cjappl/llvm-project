@@ -118,6 +118,7 @@ class EnumDecl;
 class Expr;
 class ExtQualsTypeCommonBase;
 class FunctionDecl;
+class FunctionEffectSet;
 class IdentifierInfo;
 class NamedDecl;
 class ObjCInterfaceDecl;
@@ -4646,12 +4647,6 @@ public:
 
 // ------------------------------------------------------------------------------
 
-class Decl;
-class CXXMethodDecl;
-struct FunctionEffectDiff;
-class FunctionEffectsRef;
-class FunctionEffectSet;
-
 /// Represents an abstract function effect, using just an enumeration describing
 /// its kind.
 class FunctionEffect {
@@ -4777,51 +4772,22 @@ struct FunctionEffectWithCondition {
   FunctionEffect Effect;
   FunctionEffectCondition Cond;
 
+  FunctionEffectWithCondition() = default;
+  FunctionEffectWithCondition(const FunctionEffect &E,
+                              const FunctionEffectCondition &C)
+      : Effect(E), Cond(C) {}
+
   /// Return a textual description of the effect, and its condition, if any.
   std::string description() const;
-};
 
-struct FunctionEffectDiff {
-  enum class Kind { Added, Removed, ConditionMismatch };
-
-  FunctionEffect::Kind EffectKind;
-  Kind DiffKind;
-  FunctionEffectWithCondition Old; // invalid when Added
-  FunctionEffectWithCondition New; // invalid when Removed
-
-  StringRef effectName() const {
-    if (Old.Effect.kind() != FunctionEffect::Kind::None)
-      return Old.Effect.name();
-    return New.Effect.name();
+  friend bool operator<(const FunctionEffectWithCondition &LHS,
+                        const FunctionEffectWithCondition &RHS) {
+    if (LHS.Effect < RHS.Effect)
+      return true;
+    if (RHS.Effect < LHS.Effect)
+      return false;
+    return LHS.Cond.expr() < RHS.Cond.expr();
   }
-
-  /// Describes the result of effects differing between a base class's virtual
-  /// method and an overriding method in a subclass.
-  enum class OverrideResult {
-    NoAction,
-    Warn,
-    Merge // Merge missing effect from base to derived
-  };
-
-  /// Return true if adding or removing the effect as part of a type conversion
-  /// should generate a diagnostic.
-  bool shouldDiagnoseConversion(QualType SrcType,
-                                const FunctionEffectsRef &SrcFX,
-                                QualType DstType,
-                                const FunctionEffectsRef &DstFX) const;
-
-  /// Return true if adding or removing the effect in a redeclaration should
-  /// generate a diagnostic.
-  bool shouldDiagnoseRedeclaration(const FunctionDecl &OldFunction,
-                                   const FunctionEffectsRef &OldFX,
-                                   const FunctionDecl &NewFunction,
-                                   const FunctionEffectsRef &NewFX) const;
-
-  /// Return true if adding or removing the effect in a C++ virtual method
-  /// override should generate a diagnostic.
-  OverrideResult shouldDiagnoseMethodOverride(
-      const CXXMethodDecl &OldMethod, const FunctionEffectsRef &OldFX,
-      const CXXMethodDecl &NewMethod, const FunctionEffectsRef &NewFX) const;
 };
 
 /// Support iteration in parallel through a pair of FunctionEffect and
@@ -4858,25 +4824,47 @@ public:
 /// (typically, trailing objects in FunctionProtoType, or borrowed references
 /// from a FunctionEffectSet).
 ///
-/// Invariant: there is never more than one instance of any given effect.
+/// Invariants:
+/// - there is never more than one instance of any given effect.
+/// - the array of conditions is either empty or has the same size as the
+///   array of effects.
+/// - some conditions may be null expressions; each condition pertains to
+///   the effect at the same array index.
+///
+/// Also, if there are any conditions, at least one of those expressions will be
+/// dependent, but this is only asserted in the constructor of
+/// FunctionProtoType.
+///
+/// See also FunctionEffectSet, in Sema, which provides a mutable set.
 class FunctionEffectsRef {
-  ArrayRef<FunctionEffect> Effects;
+  // Restrict classes which can call the private constructor -- these friends
+  // all maintain the required invariants. FunctionEffectSet is generally the
+  // only way in which the arrays are created; FunctionProtoType will not
+  // reorder them.
+  friend FunctionProtoType;
+  friend FunctionEffectSet;
 
-  // The array of conditions is either empty or has the same size
-  // as the array of effects.
+  ArrayRef<FunctionEffect> Effects;
   ArrayRef<FunctionEffectCondition> Conditions;
+
+  // The arrays are expected to have been sorted by the caller, with the
+  // effects in order. The conditions array must be empty or the same size
+  // as the effects array, since the conditions are associated with the effects
+  // at the same array indices.
+  FunctionEffectsRef(ArrayRef<FunctionEffect> FX,
+                     ArrayRef<FunctionEffectCondition> Conds)
+      : Effects(FX), Conditions(Conds) {}
 
 public:
   /// Extract the effects from a Type if it is a function, block, or member
   /// function pointer, or a reference or pointer to one.
   static FunctionEffectsRef get(QualType QT);
 
-  FunctionEffectsRef() = default;
+  /// Asserts invariants.
+  static FunctionEffectsRef create(ArrayRef<FunctionEffect> FX,
+                                   ArrayRef<FunctionEffectCondition> Conds);
 
-  // The arrays are expected to have been sorted by the caller.
-  FunctionEffectsRef(ArrayRef<FunctionEffect> FX,
-                     ArrayRef<FunctionEffectCondition> Conds)
-      : Effects(FX), Conditions(Conds) {}
+  FunctionEffectsRef() = default;
 
   bool empty() const { return Effects.empty(); }
   size_t size() const { return Effects.size(); }
@@ -4903,13 +4891,11 @@ public:
 };
 
 /// A mutable set of FunctionEffects and possibly conditions attached to them.
-/// Used transitorily within Sema to compare and merge effects on declarations.
+/// Used to compare and merge effects on declarations.
 ///
-/// Invariant: there is never more than one instance of any given effect.
+/// Has the same invariants as FunctionEffectsRef.
 class FunctionEffectSet {
   SmallVector<FunctionEffect> Effects;
-  // The vector of conditions is either empty or has the same size
-  // as the vector of effects.
   SmallVector<FunctionEffectCondition> Conditions;
 
 public:
@@ -4932,22 +4918,28 @@ public:
 
   // Mutators
 
-  void insert(FunctionEffect Effect, Expr *Cond);
-  void insert(const FunctionEffectsRef &Set);
-  void insertIgnoringConditions(const FunctionEffectsRef &Set);
+  // On insertion, a conflict occurs when attempting to insert an
+  // effect which is opposite an effect already in the set, or attempting
+  // to insert an effect which is already in the set but with a condition
+  // which is not identical.
+  struct Conflict {
+    FunctionEffectWithCondition Kept;
+    FunctionEffectWithCondition Rejected;
+  };
+  using Conflicts = SmallVector<Conflict>;
+
+  void insert(const FunctionEffectWithCondition &NewEC, Conflicts &Errs);
+  void insert(const FunctionEffectsRef &Set, Conflicts &Errs);
+  void insertIgnoringConditions(const FunctionEffectsRef &Set, Conflicts &Errs);
 
   void replaceItem(unsigned Idx, const FunctionEffectWithCondition &Item);
   void erase(unsigned Idx);
 
   // Set operations
   static FunctionEffectSet getUnion(FunctionEffectsRef LHS,
-                                    FunctionEffectsRef RHS);
-
-  using Differences = SmallVector<FunctionEffectDiff>;
-
-  /// Caller should short-circuit by checking for equality first.
-  static Differences differences(const FunctionEffectsRef &Old,
-                                 const FunctionEffectsRef &New);
+                                    FunctionEffectsRef RHS, Conflicts &Errs);
+  static FunctionEffectSet getIntersection(FunctionEffectsRef LHS,
+                                           FunctionEffectsRef RHS);
 };
 
 /// Represents a prototype with parameter type info, e.g.
@@ -5456,7 +5448,7 @@ public:
   }
 
   // For serialization.
-  ArrayRef<FunctionEffect> getFunctionEffectsOnly() const {
+  ArrayRef<FunctionEffect> getFunctionEffectsWithoutConditions() const {
     if (hasExtraBitfields()) {
       const auto *Bitfields = getTrailingObjects<FunctionTypeExtraBitfields>();
       if (Bitfields->NumFunctionEffects > 0)
