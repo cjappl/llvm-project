@@ -31,7 +31,6 @@
 #include "clang/AST/StmtObjC.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/CodeGenOptions.h"
-#include "clang/Basic/Sanitizers.h"
 #include "clang/Basic/TargetBuiltins.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
@@ -41,9 +40,6 @@
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/FPEnv.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Instruction.h"
-#include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/MDBuilder.h"
@@ -1376,38 +1372,6 @@ QualType CodeGenFunction::BuildFunctionArgList(GlobalDecl GD,
   return ResTy;
 }
 
-namespace {
-
-void InsertRadsanFunctionCallBeforeInstruction(llvm::Function *Fn,
-                                              llvm::Instruction &instruction,
-                                              std::string const &functionName) {
-  auto &context = Fn->getContext();
-  auto *funcType =
-      llvm::FunctionType::get(llvm::Type::getVoidTy(context), false);
-  auto func = Fn->getParent()->getOrInsertFunction(functionName, funcType);
-  llvm::IRBuilder<> builder{&instruction};
-  builder.CreateCall(func, {});
-}
-
-void insertCallAtFunctionEntryPoint(llvm::Function *Fn, std::string const &InsertFnName) {
-
-  InsertRadsanFunctionCallBeforeInstruction(Fn, Fn->front().front(),
-                                            InsertFnName);
-}
-
-void insertCallAtAllFunctionExitPoints(llvm::Function *Fn, std::string const &InsertFnName) {
-  for (auto &bb : *Fn) {
-    for (auto &i : bb) {
-      if (auto *ri = dyn_cast<llvm::ReturnInst>(&i)) {
-        InsertRadsanFunctionCallBeforeInstruction(Fn, i,
-                                                  InsertFnName);
-      }
-    }
-  }
-}
-
-} // namespace
-
 void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
                                    const CGFunctionInfo &FnInfo) {
   assert(Fn && "generating code for null Function");
@@ -1574,20 +1538,8 @@ void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
     }
   }
 
-  if (SanOpts.has(SanitizerKind::Realtime)) {
-    if (Fn->hasFnAttribute(llvm::Attribute::NonBlocking)) {
-      insertCallAtFunctionEntryPoint(Fn, "radsan_realtime_enter");
-    }
-  }
-
   // Emit the standard function epilogue.
   FinishFunction(BodyRange.getEnd());
-
-  if (SanOpts.has(SanitizerKind::Realtime)) {
-    if (Fn->hasFnAttribute(llvm::Attribute::NonBlocking)) {
-      insertCallAtAllFunctionExitPoints(Fn, "radsan_realtime_exit");
-    }
-  }
 
   // If we haven't marked the function nothrow through other means, do
   // a quick pass now to see if we can.

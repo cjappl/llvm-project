@@ -505,12 +505,6 @@ define void @f86() nosanitize_bounds
         ret void;
 }
 
-; CHECK: define void @f89() #53
-define void @f89() nonblocking
-{
-        ret void;
-}
-
 ; CHECK: define void @f87() [[FNRETTHUNKEXTERN:#[0-9]+]]
 define void @f87() fn_ret_thunk_extern { ret void }
 
@@ -600,7 +594,6 @@ define void @wide_range_attribute(i128 range(i128 618970019642690137449562111, 6
 ; CHECK: attributes #50 = { disable_sanitizer_instrumentation }
 ; CHECK: attributes #51 = { uwtable(sync) }
 ; CHECK: attributes #52 = { nosanitize_bounds }
-; CHECK: attributes #53 = { nonblocking }
 ; CHECK: attributes [[FNRETTHUNKEXTERN]] = { fn_ret_thunk_extern }
 ; CHECK: attributes [[SKIPPROFILE]] = { skipprofile }
 ; CHECK: attributes [[OPTDEBUG]] = { optdebug }

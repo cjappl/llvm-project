@@ -1984,8 +1984,6 @@ declare void @f.nosanitize_bounds() nosanitize_bounds
 declare void @f.allockind() allockind("alloc,uninitialized")
 ; CHECK: declare void @f.allockind() #50
 
-declare void @f.nonblocking() nonblocking
-; CHECK: declare void @f.nonblocking() #51
 
 ; CHECK: declare nofpclass(snan) float @nofpclass_snan(float nofpclass(snan))
 declare nofpclass(snan) float @nofpclass_snan(float nofpclass(snan))
@@ -2109,7 +2107,6 @@ define float @nofpclass_callsites(float %arg) {
 ; CHECK: attributes #49 = { nosanitize_bounds }
 ; CHECK: attributes #50 = { allockind("alloc,uninitialized") }
 ; CHECK: attributes #51 = { builtin }
-; CHECK: attributes #52 = { nonblocking }
 
 ;; Metadata
 

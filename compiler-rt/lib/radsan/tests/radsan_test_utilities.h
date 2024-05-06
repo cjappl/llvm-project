@@ -9,14 +9,17 @@
 #pragma once
 
 #include "gmock/gmock.h"
+#include "radsan.h"
 #include <string>
 
 namespace radsan_testing {
 
 template <typename Function>
-void realtimeInvoke(Function &&func) [[clang::nonblocking]]
+void realtimeInvoke(Function &&func) 
 {
+  radsan_realtime_enter();
   std::forward<Function>(func)();
+  radsan_realtime_exit();
 }
 
 template <typename Function>

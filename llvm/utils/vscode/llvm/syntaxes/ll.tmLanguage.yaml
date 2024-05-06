@@ -238,10 +238,8 @@ patterns:
             \\bnosync\\b|\
             \\bnoundef\\b|\
             \\bnounwind\\b|\
-            \\bnonblocking\\b|\
             \\bnosanitize_bounds\\b|\
             \\bnosanitize_coverage\\b|\
-            \\bnosanitize_realtime\\b|\
             \\bnull_pointer_is_valid\\b|\
             \\boptforfuzzing\\b|\
             \\boptnone\\b|\
