@@ -2388,8 +2388,6 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
       FuncAttrs.addAttribute(llvm::Attribute::NoDuplicate);
     if (TargetDecl->hasAttr<ConvergentAttr>())
       FuncAttrs.addAttribute(llvm::Attribute::Convergent);
-    if (TargetDecl->hasAttr<RealtimeAttr>())
-      FuncAttrs.addAttribute(llvm::Attribute::Realtime);
 
     if (const FunctionDecl *Fn = dyn_cast<FunctionDecl>(TargetDecl)) {
       AddAttributesFromFunctionProtoType(
@@ -2409,6 +2407,12 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
         if (Fn->isNoReturn())
           FuncAttrs.addAttribute(llvm::Attribute::NoReturn);
         NBA = Fn->getAttr<NoBuiltinAttr>();
+      }
+
+      for (const FunctionEffectWithCondition &Fe : Fn->getFunctionEffects()) {
+        if (Fe.Effect.kind() == FunctionEffect::Kind::NonBlocking) {
+          FuncAttrs.addAttribute(llvm::Attribute::NonBlocking);
+        }
       }
     }
 
