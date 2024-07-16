@@ -32,6 +32,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/socket.h>
 
 using namespace testing;
@@ -71,6 +72,12 @@ TEST(TestRtsanInterceptors, MallocDiesWhenRealtime) {
   ExpectNonRealtimeSurvival(Func);
 }
 
+TEST(TestRtsanInterceptors, CallocDiesWhenRealtime) {
+  auto Func = []() { EXPECT_NE(nullptr, calloc(1, 1)); };
+  ExpectRealtimeDeath(Func, "calloc");
+  ExpectNonRealtimeSurvival(Func);
+}
+
 TEST(TestRtsanInterceptors, ReallocDiesWhenRealtime) {
   void *ptr_1 = malloc(1);
   auto Func = [ptr_1]() { EXPECT_NE(nullptr, realloc(ptr_1, 8)); };
@@ -80,12 +87,26 @@ TEST(TestRtsanInterceptors, ReallocDiesWhenRealtime) {
 
 #if SANITIZER_APPLE
 TEST(TestRtsanInterceptors, ReallocfDiesWhenRealtime) {
+  // The function that actually trips up rtsan is the underlying.
+  // call to realloc. Causing this function name to appear
+
+  const char *REALLOCF_FAILURE_FUNC_NAME = "realloc";
+
   void *ptr_1 = malloc(1);
   auto Func = [ptr_1]() { EXPECT_NE(nullptr, reallocf(ptr_1, 8)); };
-  ExpectRealtimeDeath(Func, "reallocf");
+  ExpectRealtimeDeath(Func, REALLOCF_FAILURE_FUNC_NAME);
   ExpectNonRealtimeSurvival(Func);
 }
-#endif
+#endif // SANITIZER_APPLE
+
+#if SANITIZER_INTERCEPT_REALLOCARRAY
+TEST(TestRtsanInterceptors, ReallocarrayDiesWhenRealtime) {
+  void *ptr_1 = malloc(1);
+  auto Func = [ptr_1]() { EXPECT_NE(nullptr, reallocarray(ptr_1, 1, 8)); };
+  ExpectRealtimeDeath(Func, "reallocarray");
+  ExpectNonRealtimeSurvival(Func);
+}
+#endif // SANITIZER_INTERCEPT_REALLOCARRAY
 
 TEST(TestRtsanInterceptors, VallocDiesWhenRealtime) {
   auto Func = []() { EXPECT_NE(nullptr, valloc(4)); };

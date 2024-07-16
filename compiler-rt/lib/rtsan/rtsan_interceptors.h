@@ -12,4 +12,5 @@
 
 namespace __rtsan {
 void InitializeInterceptors();
+void InitializeMallocInterceptors();
 } // namespace __rtsan

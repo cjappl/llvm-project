@@ -47,4 +47,10 @@ SANITIZER_INTERFACE_ATTRIBUTE void __rtsan_on() {
   __rtsan::GetContextForThisThread().BypassPop();
 }
 
+SANITIZER_INTERFACE_ATTRIBUTE void
+__rtsan_expect_not_realtime(const char *intercepted_function_name) {
+  __rtsan::GetContextForThisThread().ExpectNotRealtime(
+      intercepted_function_name);
+}
+
 } // extern "C"
