@@ -7,21 +7,19 @@
 #include <pthread.h>
 #include <stdlib.h>
 
-__attribute__((no_sanitize("realtime")))
-void bypassedLock(pthread_mutex_t& Mutex) {
+__attribute__((no_sanitize("realtime"))) void
+bypassedLock(pthread_mutex_t &Mutex) {
   pthread_mutex_lock(&Mutex);
 }
 
-__attribute__((no_sanitize("realtime")))
-void bypassedUnlock(pthread_mutex_t& Mutex) {
-    pthread_mutex_unlock(&Mutex);
+__attribute__((no_sanitize("realtime"))) void
+bypassedUnlock(pthread_mutex_t &Mutex) {
+  pthread_mutex_unlock(&Mutex);
 }
 
-void violationLock(pthread_mutex_t& Mutex) {
-  pthread_mutex_lock(&Mutex);
-}
+void violationLock(pthread_mutex_t &Mutex) { pthread_mutex_lock(&Mutex); }
 
-void process(pthread_mutex_t& Mutex) [[clang::nonblocking]] {
+void process(pthread_mutex_t &Mutex) [[clang::nonblocking]] {
   bypassedLock(Mutex);
   bypassedUnlock(Mutex);
 

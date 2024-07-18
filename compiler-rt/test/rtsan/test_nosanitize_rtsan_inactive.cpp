@@ -8,14 +8,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-__attribute__((no_sanitize("realtime")))
-void noSanitizeFree(void* Ptr) {
-    free(Ptr);
+__attribute__((no_sanitize("realtime"))) void noSanitizeFree(void *Ptr) {
+  free(Ptr);
 }
 
 void violation() [[clang::nonblocking]] {
-    void* Ptr = malloc(2);
-    noSanitizeFree(Ptr);
+  void *Ptr = malloc(2);
+  noSanitizeFree(Ptr);
 }
 
 int main() {
@@ -25,7 +24,7 @@ int main() {
   violation();
 
   // Check everything is OK in a non-realtime block
-  void* Ptr = malloc(2);
+  void *Ptr = malloc(2);
   noSanitizeFree(Ptr);
 
   printf("No violations ended the program\n");

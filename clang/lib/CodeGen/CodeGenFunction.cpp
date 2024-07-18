@@ -31,9 +31,9 @@
 #include "clang/AST/StmtObjC.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/CodeGenOptions.h"
+#include "clang/Basic/Sanitizers.h"
 #include "clang/Basic/TargetBuiltins.h"
 #include "clang/Basic/TargetInfo.h"
-#include "clang/Basic/Sanitizers.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -821,8 +821,7 @@ void CodeGenFunction::StartFunction(GlobalDecl GD, QualType RetTy,
     if (no_sanitize_mask & SanitizerKind::KernelHWAddress)
       SanOpts.set(SanitizerKind::HWAddress, false);
 
-    if (NoSanitizeRealtime)
-    {
+    if (NoSanitizeRealtime) {
       Fn->addFnAttr(llvm::Attribute::NoSanitizeRealtime);
     }
 
@@ -1440,18 +1439,19 @@ void InsertRtsanFunctionCallBeforeInstruction(llvm::Function *Fn,
   builder.CreateCall(func, {});
 }
 
-void insertCallAtFunctionEntryPoint(llvm::Function *Fn, std::string const &InsertFnName) {
+void insertCallAtFunctionEntryPoint(llvm::Function *Fn,
+                                    std::string const &InsertFnName) {
 
   InsertRtsanFunctionCallBeforeInstruction(Fn, Fn->front().front(),
-                                            InsertFnName);
+                                           InsertFnName);
 }
 
-void insertCallAtAllFunctionExitPoints(llvm::Function *Fn, std::string const &InsertFnName) {
+void insertCallAtAllFunctionExitPoints(llvm::Function *Fn,
+                                       std::string const &InsertFnName) {
   for (auto &bb : *Fn) {
     for (auto &i : bb) {
       if (auto *ri = dyn_cast<llvm::ReturnInst>(&i)) {
-        InsertRtsanFunctionCallBeforeInstruction(Fn, i,
-                                                  InsertFnName);
+        InsertRtsanFunctionCallBeforeInstruction(Fn, i, InsertFnName);
       }
     }
   }

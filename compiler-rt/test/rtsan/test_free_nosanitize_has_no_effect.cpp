@@ -2,16 +2,15 @@
 // RUN: %run %t 2>&1 | FileCheck %s
 // UNSUPPORTED: ios
 
-// Intent: Ensure that a no_sanitize attribute has no impact 
+// Intent: Ensure that a no_sanitize attribute has no impact
 //         if not in a [[clang::nonblocking]] function
 
 #include <stdio.h>
 #include <stdlib.h>
 
-__attribute__((no_sanitize("realtime")))
-void violation() {
-    void* Ptr = malloc(2);
-    free(Ptr);
+__attribute__((no_sanitize("realtime"))) void violation() {
+  void *Ptr = malloc(2);
+  free(Ptr);
 }
 
 int main() {
