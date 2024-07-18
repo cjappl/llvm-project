@@ -1429,7 +1429,7 @@ QualType CodeGenFunction::BuildFunctionArgList(GlobalDecl GD,
 
 namespace {
 
-void InsertRadsanFunctionCallBeforeInstruction(llvm::Function *Fn,
+void InsertRtsanFunctionCallBeforeInstruction(llvm::Function *Fn,
                                               llvm::Instruction &instruction,
                                               std::string const &functionName) {
   auto &context = Fn->getContext();
@@ -1442,7 +1442,7 @@ void InsertRadsanFunctionCallBeforeInstruction(llvm::Function *Fn,
 
 void insertCallAtFunctionEntryPoint(llvm::Function *Fn, std::string const &InsertFnName) {
 
-  InsertRadsanFunctionCallBeforeInstruction(Fn, Fn->front().front(),
+  InsertRtsanFunctionCallBeforeInstruction(Fn, Fn->front().front(),
                                             InsertFnName);
 }
 
@@ -1450,7 +1450,7 @@ void insertCallAtAllFunctionExitPoints(llvm::Function *Fn, std::string const &In
   for (auto &bb : *Fn) {
     for (auto &i : bb) {
       if (auto *ri = dyn_cast<llvm::ReturnInst>(&i)) {
-        InsertRadsanFunctionCallBeforeInstruction(Fn, i,
+        InsertRtsanFunctionCallBeforeInstruction(Fn, i,
                                                   InsertFnName);
       }
     }
@@ -1629,11 +1629,11 @@ void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
 
   if (SanOpts.has(SanitizerKind::Realtime)) {
     if (Fn->hasFnAttribute(llvm::Attribute::NoSanitizeRealtime)) {
-      insertCallAtFunctionEntryPoint(Fn, "radsan_off");
+      insertCallAtFunctionEntryPoint(Fn, "__rtsan_off");
     }
 
     if (Fn->hasFnAttribute(llvm::Attribute::NonBlocking)) {
-      insertCallAtFunctionEntryPoint(Fn, "radsan_realtime_enter");
+      insertCallAtFunctionEntryPoint(Fn, "__rtsan_realtime_enter");
     }
   }
 
@@ -1642,11 +1642,11 @@ void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
 
   if (SanOpts.has(SanitizerKind::Realtime)) {
     if (Fn->hasFnAttribute(llvm::Attribute::NoSanitizeRealtime)) {
-      insertCallAtAllFunctionExitPoints(Fn, "radsan_on");
+      insertCallAtAllFunctionExitPoints(Fn, "__rtsan_on");
     }
 
     if (Fn->hasFnAttribute(llvm::Attribute::NonBlocking)) {
-      insertCallAtAllFunctionExitPoints(Fn, "radsan_realtime_exit");
+      insertCallAtAllFunctionExitPoints(Fn, "__rtsan_realtime_exit");
     }
   }
 
