@@ -1426,38 +1426,34 @@ QualType CodeGenFunction::BuildFunctionArgList(GlobalDecl GD,
   return ResTy;
 }
 
-namespace {
-
-void InsertRtsanFunctionCallBeforeInstruction(llvm::Function *Fn,
-                                              llvm::Instruction &instruction,
-                                              std::string const &functionName) {
-  auto &context = Fn->getContext();
-  auto *funcType =
+void InsertCallBeforeInstruction(llvm::Function *Fn,
+                                 llvm::Instruction &Instruction,
+                                 const char *FunctionName) {
+  llvm::LLVMContext &context = Fn->getContext();
+  llvm::FunctionType *FuncType =
       llvm::FunctionType::get(llvm::Type::getVoidTy(context), false);
-  auto func = Fn->getParent()->getOrInsertFunction(functionName, funcType);
-  llvm::IRBuilder<> builder{&instruction};
-  builder.CreateCall(func, {});
+  llvm::FunctionCallee Func =
+      Fn->getParent()->getOrInsertFunction(FunctionName, FuncType);
+  llvm::IRBuilder<> builder{&Instruction};
+  builder.CreateCall(Func, {});
 }
 
-void insertCallAtFunctionEntryPoint(llvm::Function *Fn,
-                                    std::string const &InsertFnName) {
+void InsertCallAtFunctionEntryPoint(llvm::Function *Fn,
+                                    const char *InsertFnName) {
 
-  InsertRtsanFunctionCallBeforeInstruction(Fn, Fn->front().front(),
-                                           InsertFnName);
+  InsertCallBeforeInstruction(Fn, Fn->front().front(), InsertFnName);
 }
 
-void insertCallAtAllFunctionExitPoints(llvm::Function *Fn,
-                                       std::string const &InsertFnName) {
-  for (auto &bb : *Fn) {
-    for (auto &i : bb) {
-      if (auto *ri = dyn_cast<llvm::ReturnInst>(&i)) {
-        InsertRtsanFunctionCallBeforeInstruction(Fn, i, InsertFnName);
+void InsertCallAtAllFunctionExitPoints(llvm::Function *Fn,
+                                       const char *InsertFnName) {
+  for (auto &BB : *Fn) {
+    for (auto &I : BB) {
+      if (auto *RI = dyn_cast<llvm::ReturnInst>(&I)) {
+        InsertCallBeforeInstruction(Fn, I, InsertFnName);
       }
     }
   }
 }
-
-} // namespace
 
 void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
                                    const CGFunctionInfo &FnInfo) {
@@ -1628,26 +1624,22 @@ void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
   }
 
   if (SanOpts.has(SanitizerKind::Realtime)) {
-    if (Fn->hasFnAttribute(llvm::Attribute::NoSanitizeRealtime)) {
-      insertCallAtFunctionEntryPoint(Fn, "__rtsan_off");
-    }
+    if (Fn->hasFnAttribute(llvm::Attribute::NoSanitizeRealtime))
+      InsertCallAtFunctionEntryPoint(Fn, "__rtsan_off");
 
-    if (Fn->hasFnAttribute(llvm::Attribute::NonBlocking)) {
-      insertCallAtFunctionEntryPoint(Fn, "__rtsan_realtime_enter");
-    }
+    if (Fn->hasFnAttribute(llvm::Attribute::NonBlocking))
+      InsertCallAtFunctionEntryPoint(Fn, "__rtsan_realtime_enter");
   }
 
   // Emit the standard function epilogue.
   FinishFunction(BodyRange.getEnd());
 
   if (SanOpts.has(SanitizerKind::Realtime)) {
-    if (Fn->hasFnAttribute(llvm::Attribute::NoSanitizeRealtime)) {
-      insertCallAtAllFunctionExitPoints(Fn, "__rtsan_on");
-    }
+    if (Fn->hasFnAttribute(llvm::Attribute::NoSanitizeRealtime))
+      InsertCallAtAllFunctionExitPoints(Fn, "__rtsan_on");
 
-    if (Fn->hasFnAttribute(llvm::Attribute::NonBlocking)) {
-      insertCallAtAllFunctionExitPoints(Fn, "__rtsan_realtime_exit");
-    }
+    if (Fn->hasFnAttribute(llvm::Attribute::NonBlocking))
+      InsertCallAtAllFunctionExitPoints(Fn, "__rtsan_realtime_exit");
   }
 
   // If we haven't marked the function nothrow through other means, do

@@ -2188,7 +2188,7 @@ example:
     This attribute indicates that SanitizerCoverage instrumentation is disabled
     for this function.
 ``nosanitize_realtime``
-    This attribute indicates that SanitizerRealtime is disabled for this 
+    This attribute indicates that SanitizerRealtime is disabled for this
     function. If called from a function marked ``clang::realtime``, no
     errors that would normally be reported by SanitizerRealtime will be
     reported.
