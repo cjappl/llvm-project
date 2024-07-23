@@ -144,6 +144,7 @@ syn keyword llvmKeyword
       \ nounwind
       \ nosanitize_bounds
       \ nosanitize_coverage
+      \ nosanitize_realtime
       \ null_pointer_is_valid
       \ optdebug
       \ optforfuzzing
