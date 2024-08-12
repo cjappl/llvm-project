@@ -5,6 +5,8 @@ set(RTSAN_CXX_SOURCES
   rtsan_context.cpp
   rtsan_flags.cpp
   rtsan_stack.cpp
+  rtsan_malloc_mac.cpp
+  rtsan_malloc_linux.cpp
   rtsan_interceptors.cpp)
 
 set(RTSAN_PREINIT_SOURCES

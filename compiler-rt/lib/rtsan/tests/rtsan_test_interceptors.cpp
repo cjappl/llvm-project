@@ -89,12 +89,17 @@ TEST(TestRtsanInterceptors, ReallocDiesWhenRealtime) {
 
 #if SANITIZER_APPLE
 TEST(TestRtsanInterceptors, ReallocfDiesWhenRealtime) {
+  // The function that actually trips up rtsan is the underlying.
+  // call to realloc. Causing this function name to appear
+
+  const char *REALLOCF_FAILURE_FUNC_NAME = "realloc";
+
   void *ptr_1 = malloc(1);
   auto Func = [ptr_1]() { EXPECT_NE(nullptr, reallocf(ptr_1, 8)); };
-  ExpectRealtimeDeath(Func, "reallocf");
+  ExpectRealtimeDeath(Func, REALLOCF_FAILURE_FUNC_NAME);
   ExpectNonRealtimeSurvival(Func);
 }
-#endif
+#endif // SANITIZER_APPLE
 
 TEST(TestRtsanInterceptors, VallocDiesWhenRealtime) {
   auto Func = []() { EXPECT_NE(nullptr, valloc(4)); };

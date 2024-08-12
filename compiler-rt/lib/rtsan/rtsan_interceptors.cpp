@@ -37,10 +37,6 @@ void OSSpinLockLock(volatile OSSpinLock *__lock);
 #include <os/lock.h>
 #endif
 
-#if SANITIZER_INTERCEPT_MEMALIGN || SANITIZER_INTERCEPT_PVALLOC
-#include <malloc.h>
-#endif
-
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -50,12 +46,6 @@ void OSSpinLockLock(volatile OSSpinLock *__lock);
 #include <unistd.h>
 
 using namespace __sanitizer;
-
-namespace {
-struct DlsymAlloc : public DlSymAllocator<DlsymAlloc> {
-  static bool UseImpl() { return !__rtsan_is_initialized(); }
-};
-} // namespace
 
 // Filesystem
 
@@ -283,81 +273,6 @@ INTERCEPTOR(int, nanosleep, const struct timespec *rqtp,
   return REAL(nanosleep)(rqtp, rmtp);
 }
 
-// Memory
-
-INTERCEPTOR(void *, calloc, SIZE_T num, SIZE_T size) {
-  if (DlsymAlloc::Use())
-    return DlsymAlloc::Callocate(num, size);
-
-  __rtsan_expect_not_realtime("calloc");
-  return REAL(calloc)(num, size);
-}
-
-INTERCEPTOR(void, free, void *ptr) {
-  if (DlsymAlloc::PointerIsMine(ptr))
-    return DlsymAlloc::Free(ptr);
-
-  if (ptr != NULL) {
-    __rtsan_expect_not_realtime("free");
-  }
-  return REAL(free)(ptr);
-}
-
-INTERCEPTOR(void *, malloc, SIZE_T size) {
-  if (DlsymAlloc::Use())
-    return DlsymAlloc::Allocate(size);
-
-  __rtsan_expect_not_realtime("malloc");
-  return REAL(malloc)(size);
-}
-
-INTERCEPTOR(void *, realloc, void *ptr, SIZE_T size) {
-  if (DlsymAlloc::Use() || DlsymAlloc::PointerIsMine(ptr))
-    return DlsymAlloc::Realloc(ptr, size);
-
-  __rtsan_expect_not_realtime("realloc");
-  return REAL(realloc)(ptr, size);
-}
-
-INTERCEPTOR(void *, reallocf, void *ptr, SIZE_T size) {
-  __rtsan_expect_not_realtime("reallocf");
-  return REAL(reallocf)(ptr, size);
-}
-
-INTERCEPTOR(void *, valloc, SIZE_T size) {
-  __rtsan_expect_not_realtime("valloc");
-  return REAL(valloc)(size);
-}
-
-#if SANITIZER_INTERCEPT_ALIGNED_ALLOC
-INTERCEPTOR(void *, aligned_alloc, SIZE_T alignment, SIZE_T size) {
-  __rtsan_expect_not_realtime("aligned_alloc");
-  return REAL(aligned_alloc)(alignment, size);
-}
-#define RTSAN_MAYBE_INTERCEPT_ALIGNED_ALLOC INTERCEPT_FUNCTION(aligned_alloc)
-#else
-#define RTSAN_MAYBE_INTERCEPT_ALIGNED_ALLOC
-#endif
-
-INTERCEPTOR(int, posix_memalign, void **memptr, size_t alignment, size_t size) {
-  __rtsan_expect_not_realtime("posix_memalign");
-  return REAL(posix_memalign)(memptr, alignment, size);
-}
-
-#if SANITIZER_INTERCEPT_MEMALIGN
-INTERCEPTOR(void *, memalign, size_t alignment, size_t size) {
-  __rtsan_expect_not_realtime("memalign");
-  return REAL(memalign)(alignment, size);
-}
-#endif
-
-#if SANITIZER_INTERCEPT_PVALLOC
-INTERCEPTOR(void *, pvalloc, size_t size) {
-  __rtsan_expect_not_realtime("pvalloc");
-  return REAL(pvalloc)(size);
-}
-#endif
-
 // Sockets
 INTERCEPTOR(int, socket, int domain, int type, int protocol) {
   __rtsan_expect_not_realtime("socket");
@@ -404,20 +319,7 @@ INTERCEPTOR(int, shutdown, int socket, int how) {
 
 // Preinit
 void __rtsan::InitializeInterceptors() {
-  INTERCEPT_FUNCTION(calloc);
-  INTERCEPT_FUNCTION(free);
-  INTERCEPT_FUNCTION(malloc);
-  INTERCEPT_FUNCTION(realloc);
-  INTERCEPT_FUNCTION(reallocf);
-  INTERCEPT_FUNCTION(valloc);
-  RTSAN_MAYBE_INTERCEPT_ALIGNED_ALLOC;
-  INTERCEPT_FUNCTION(posix_memalign);
-#if SANITIZER_INTERCEPT_MEMALIGN
-  INTERCEPT_FUNCTION(memalign);
-#endif
-#if SANITIZER_INTERCEPT_PVALLOC
-  INTERCEPT_FUNCTION(pvalloc);
-#endif
+  __rtsan::InitializeMallocInterceptors();
 
   INTERCEPT_FUNCTION(open);
   INTERCEPT_FUNCTION(openat);
