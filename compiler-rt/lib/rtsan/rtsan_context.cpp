@@ -26,6 +26,12 @@ using namespace __sanitizer;
 static pthread_key_t context_key;
 static pthread_once_t key_once = PTHREAD_ONCE_INIT;
 
+static __sanitizer::atomic_uint64_t __rtsan_report_count{0};
+
+static void IncrementErrorCount() {
+  atomic_fetch_add(&__rtsan_report_count, 1, memory_order_relaxed);
+}
+
 // InternalFree cannot be passed directly to pthread_key_create
 // because it expects a signature with only one arg
 static void InternalFreeWrapper(void *ptr) { __sanitizer::InternalFree(ptr); }
@@ -62,7 +68,7 @@ static __rtsan::Context &GetContextForThisThreadImpl() {
     Until then, and to keep the first PRs small, only the exit mode
     is available.
 */
-static void InvokeViolationDetectedAction() { exit(EXIT_FAILURE); }
+static void InvokeViolationDetectedAction() { Die(); }
 
 __rtsan::Context::Context() = default;
 
@@ -78,6 +84,7 @@ void __rtsan::ExpectNotRealtime(Context &context,
                                 const char *intercepted_function_name) {
   CHECK(__rtsan_is_initialized());
   if (context.InRealtimeContext() && !context.IsBypassed()) {
+    IncrementErrorCount();
     context.BypassPush();
 
     GET_CALLER_PC_BP;

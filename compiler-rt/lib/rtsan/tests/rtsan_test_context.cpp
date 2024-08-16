@@ -15,6 +15,8 @@
 
 #include <gtest/gtest.h>
 
+#include <gtest/gtest.h>
+
 class TestRtsanContext : public ::testing::Test {
 protected:
   void SetUp() override { __rtsan_ensure_initialized(); }

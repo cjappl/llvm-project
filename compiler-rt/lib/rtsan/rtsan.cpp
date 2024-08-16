@@ -9,6 +9,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <rtsan/rtsan.h>
+
 #include <rtsan/rtsan_context.h>
 #include <rtsan/rtsan_flags.h>
 #include <rtsan/rtsan_interceptors.h>
