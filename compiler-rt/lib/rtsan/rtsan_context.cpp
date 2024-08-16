@@ -9,7 +9,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <rtsan/rtsan.h>
+
 #include <rtsan/rtsan_context.h>
+#include <rtsan/rtsan_flags.h>
 
 #include <rtsan/rtsan_stack.h>
 
@@ -20,8 +22,10 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 using namespace __sanitizer;
+using namespace __rtsan;
 
 static pthread_key_t context_key;
 static pthread_once_t key_once = PTHREAD_ONCE_INIT;
@@ -54,21 +58,12 @@ static __rtsan::Context &GetContextForThisThreadImpl() {
   return *current_thread_context;
 }
 
-/*
-    This is a placeholder stub for a future feature that will allow
-    a user to configure RTSan's behaviour when a real-time safety
-    violation is detected. The RTSan developers intend for the
-    following choices to be made available, via a RTSAN_OPTIONS
-    environment variable, in a future PR:
+static void InvokeViolationDetectedAction() {
+  const bool halt_on_error = flags().halt_on_error;
 
-        i) exit,
-       ii) continue, or
-      iii) wait for user input from stdin.
-
-    Until then, and to keep the first PRs small, only the exit mode
-    is available.
-*/
-static void InvokeViolationDetectedAction() { Die(); }
+  if (halt_on_error)
+    Die();
+}
 
 __rtsan::Context::Context() = default;
 
