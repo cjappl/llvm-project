@@ -29,10 +29,11 @@ static void SetInitialized() {
   atomic_store(&rtsan_initialized, 1, memory_order_release);
 }
 
-static auto PrintDiagnosticsAndDieAction(DiagnosticsInfo info) {
+static auto DefaultErrorAction(DiagnosticsInfo info) {
   return [info]() {
     __rtsan::PrintDiagnostics(info);
-    Die();
+    if (flags().halt_on_error)
+      Die();
   };
 }
 
@@ -87,16 +88,15 @@ __rtsan_notify_intercepted_call(const char *func_name) {
   GET_CALLER_PC_BP;
   ExpectNotRealtime(
       GetContextForThisThread(),
-      PrintDiagnosticsAndDieAction({InterceptedCallInfo{func_name}, pc, bp}));
+      DefaultErrorAction({InterceptedCallInfo{func_name}, pc, bp}));
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE void
 __rtsan_notify_blocking_call(const char *func_name) {
   __rtsan_ensure_initialized();
   GET_CALLER_PC_BP;
-  ExpectNotRealtime(
-      GetContextForThisThread(),
-      PrintDiagnosticsAndDieAction({BlockingCallInfo{func_name}, pc, bp}));
+  ExpectNotRealtime(GetContextForThisThread(),
+                    DefaultErrorAction({BlockingCallInfo{func_name}, pc, bp}));
 }
 
 } // extern "C"
