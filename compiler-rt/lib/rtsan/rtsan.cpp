@@ -15,6 +15,7 @@
 #include <rtsan/rtsan_interceptors.h>
 #include <rtsan/rtsan_internal.h>
 #include <rtsan/rtsan_stack.h>
+#include <rtsan/rtsan_suppressions.h>
 
 #include "sanitizer_common/sanitizer_atomic.h"
 #include "sanitizer_common/sanitizer_common.h"
@@ -77,22 +78,24 @@ static bool SuppressErrorReport(uptr pc) {
 
 void __rtsan::InternalExpectNotRealtime(Context &context,
                                         const char *intercepted_function_name,
-                                        uptr pc, uptr bc) {
+                                        uptr pc, uptr bp) {
   __rtsan_ensure_initialized();
 
   if (context.InRealtimeContext() && !context.IsBypassed()) {
     context.BypassPush();
-    IncrementTotalErrorCount();
+    if (!IsPCSuppressed(ErrorType::FunctionCall, pc)) {
+      IncrementTotalErrorCount();
 
-    if (!SuppressErrorReport(pc)) {
-      IncrementUniqueErrorCount();
+      if (!SuppressErrorReport(pc)) {
+        IncrementUniqueErrorCount();
 
-      PrintDiagnostics(intercepted_function_name, pc, bc);
 
-      if (flags().halt_on_error)
-        Die();
+        PrintDiagnostics(intercepted_function_name, pc, bp);
+
+        if (flags().halt_on_error)
+          Die();
+      }
     }
-
     context.BypassPop();
   }
 }
@@ -112,6 +115,7 @@ SANITIZER_INTERFACE_ATTRIBUTE void __rtsan_init() {
   SanitizerToolName = "RealtimeSanitizer";
   InitializeFlags();
   InitializeInterceptors();
+  InitializeSuppressions();
 
   if (flags().print_stats_on_exit)
     Atexit(rtsan_atexit);

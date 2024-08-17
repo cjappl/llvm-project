@@ -7,18 +7,22 @@ set(RTSAN_CXX_SOURCES
   rtsan_stack.cpp
   rtsan_malloc_mac.cpp
   rtsan_malloc_linux.cpp
-  rtsan_interceptors.cpp)
+  rtsan_interceptors.cpp
+  rtsan_suppressions.cpp
+  )
 
 set(RTSAN_PREINIT_SOURCES
   rtsan_preinit.cpp)
 
 set(RTSAN_HEADERS
   rtsan.h
+  rtsan_checks.inc
   rtsan_context.h
   rtsan_flags.h
   rtsan_flags.inc
   rtsan_internal.h
   rtsan_stack.h
+  rtsan_suppressions.h
   )
 
 set(RTSAN_DEPS)

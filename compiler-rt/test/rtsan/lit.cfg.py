@@ -33,6 +33,16 @@ config.substitutions.append(("%clang_rtsan ", build_invocation(clang_rtsan_cflag
 config.substitutions.append(("%clangxx_rtsan", build_invocation(clang_rtsan_cxxflags)))
 config.substitutions.append(("%llvm_rtsan", llvm_rtsan))
 
+default_rtsan_opts = ""
+
+# Platform-specific default TSAN_OPTIONS for lit tests.
+if default_rtsan_opts:
+    config.environment["RSAN_OPTIONS"] = default_rtsan_opts
+    default_rtsan_opts += ":"
+config.substitutions.append(
+    ("%env_rtsan_opts=", "env RTSAN_OPTIONS=" + default_rtsan_opts)
+)
+
 # Default test suffixes.
 config.suffixes = [".c", ".cpp"]
 
