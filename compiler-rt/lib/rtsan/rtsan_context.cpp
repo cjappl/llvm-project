@@ -30,12 +30,6 @@ using namespace __rtsan;
 static pthread_key_t context_key;
 static pthread_once_t key_once = PTHREAD_ONCE_INIT;
 
-static __sanitizer::atomic_uint64_t __rtsan_report_count{0};
-
-static void IncrementErrorCount() {
-  atomic_fetch_add(&__rtsan_report_count, 1, memory_order_relaxed);
-}
-
 // InternalFree cannot be passed directly to pthread_key_create
 // because it expects a signature with only one arg
 static void InternalFreeWrapper(void *ptr) { __sanitizer::InternalFree(ptr); }
@@ -58,13 +52,6 @@ static __rtsan::Context &GetContextForThisThreadImpl() {
   return *current_thread_context;
 }
 
-static void InvokeViolationDetectedAction() {
-  const bool halt_on_error = flags().halt_on_error;
-
-  if (halt_on_error)
-    Die();
-}
-
 __rtsan::Context::Context() = default;
 
 void __rtsan::Context::RealtimePush() { realtime_depth_++; }
@@ -75,34 +62,9 @@ void __rtsan::Context::BypassPush() { bypass_depth_++; }
 
 void __rtsan::Context::BypassPop() { bypass_depth_--; }
 
-void __rtsan::ExpectNotRealtime(Context &context,
-                                const char *intercepted_function_name) {
-  CHECK(__rtsan_is_initialized());
-  if (context.InRealtimeContext() && !context.IsBypassed()) {
-    IncrementErrorCount();
-    context.BypassPush();
-
-    GET_CALLER_PC_BP;
-    PrintDiagnostics(intercepted_function_name, pc, bp);
-    InvokeViolationDetectedAction();
-    context.BypassPop();
-  }
-}
-
-bool __rtsan::Context::InRealtimeContext() const { return realtime_depth_ > 0; }
+bool __rtsan::Context::InRealtimeContext() const { return realtime_depth > 0; }
 
 bool __rtsan::Context::IsBypassed() const { return bypass_depth_ > 0; }
-
-void __rtsan::PrintDiagnostics(const char *intercepted_function_name, uptr pc,
-                               uptr bp) {
-  ScopedErrorReportLock l;
-
-  fprintf(stderr,
-          "Real-time violation: intercepted call to real-time unsafe function "
-          "`%s` in real-time context! Stack trace:\n",
-          intercepted_function_name);
-  __rtsan::PrintStackTrace(pc, bp);
-}
 
 __rtsan::Context &__rtsan::GetContextForThisThread() {
   return GetContextForThisThreadImpl();

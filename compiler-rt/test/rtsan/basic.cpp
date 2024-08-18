@@ -9,14 +9,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void violation() [[clang::nonblocking]] {
+void malloc_violation() [[clang::nonblocking]] {
   void *ptr = malloc(2);
   printf("ptr: %p\n", ptr); // ensure we don't optimize out the malloc
 }
 
 int main() {
-  violation();
+  malloc_violation();
   return 0;
   // CHECK: Real-time violation: intercepted call to real-time unsafe function `malloc` in real-time context! Stack trace:
-  // CHECK-NEXT: {{.*malloc*}}
+  // CHECK-NEXT: {{.*malloc_violation*}}
 }

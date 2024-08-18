@@ -12,6 +12,7 @@
 
 #include "rtsan/rtsan.h"
 #include "rtsan/rtsan_context.h"
+#include "rtsan/rtsan_internal.h"
 
 #include <gtest/gtest.h>
 
@@ -24,21 +25,21 @@ protected:
 
 TEST_F(TestRtsanContext, ExpectNotRealtimeDoesNotDieBeforeRealtimePush) {
   __rtsan::Context context{};
-  ExpectNotRealtime(context, "do_some_stuff");
+  InternalExpectNotRealtime(context, "do_some_stuff", 0, 0);
 }
 
 TEST_F(TestRtsanContext, ExpectNotRealtimeDoesNotDieAfterPushAndPop) {
   __rtsan::Context context{};
   context.RealtimePush();
   context.RealtimePop();
-  ExpectNotRealtime(context, "do_some_stuff");
+  InternalExpectNotRealtime(context, "do_some_stuff", 0, 0);
 }
 
 TEST_F(TestRtsanContext, ExpectNotRealtimeDiesAfterRealtimePush) {
   __rtsan::Context context{};
 
   context.RealtimePush();
-  EXPECT_DEATH(ExpectNotRealtime(context, "do_some_stuff"), "");
+  EXPECT_DEATH(InternalExpectNotRealtime(context, "do_some_stuff", 0, 0), "");
 }
 
 TEST_F(TestRtsanContext,
@@ -50,7 +51,7 @@ TEST_F(TestRtsanContext,
   context.RealtimePush();
   context.RealtimePop();
   context.RealtimePop();
-  EXPECT_DEATH(ExpectNotRealtime(context, "do_some_stuff"), "");
+  EXPECT_DEATH(InternalExpectNotRealtime(context, "do_some_stuff", 0, 0), "");
 }
 
 TEST_F(TestRtsanContext, ExpectNotRealtimeDoesNotDieAfterBypassPush) {
@@ -58,7 +59,7 @@ TEST_F(TestRtsanContext, ExpectNotRealtimeDoesNotDieAfterBypassPush) {
 
   context.RealtimePush();
   context.BypassPush();
-  ExpectNotRealtime(context, "do_some_stuff");
+  InternalExpectNotRealtime(context, "do_some_stuff", 0, 0);
 }
 
 TEST_F(TestRtsanContext,
@@ -71,7 +72,7 @@ TEST_F(TestRtsanContext,
   context.BypassPush();
   context.BypassPop();
   context.BypassPop();
-  ExpectNotRealtime(context, "do_some_stuff");
+  InternalExpectNotRealtime(context, "do_some_stuff", 0, 0);
   context.BypassPop();
-  EXPECT_DEATH(ExpectNotRealtime(context, "do_some_stuff"), "");
+  EXPECT_DEATH(InternalExpectNotRealtime(context, "do_some_stuff", 0, 0), "");
 }

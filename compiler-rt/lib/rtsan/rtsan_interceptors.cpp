@@ -19,6 +19,7 @@
 #include "interception/interception.h"
 #include "rtsan/rtsan.h"
 #include "rtsan/rtsan_context.h"
+#include "rtsan/rtsan_internal.h"
 
 #if SANITIZER_APPLE
 
@@ -46,13 +47,14 @@ void OSSpinLockLock(volatile OSSpinLock *__lock);
 #include <unistd.h>
 
 using namespace __sanitizer;
+using namespace __rtsan;
 
 // Filesystem
 
 INTERCEPTOR(int, open, const char *path, int oflag, ...) {
   // TODO Establish whether we should intercept here if the flag contains
   // O_NONBLOCK
-  __rtsan_expect_not_realtime("open");
+  RTSAN_EXPECT_NOT_REALTIME("open");
 
   va_list args;
   va_start(args, oflag);
@@ -66,7 +68,7 @@ INTERCEPTOR(int, open, const char *path, int oflag, ...) {
 INTERCEPTOR(int, openat, int fd, const char *path, int oflag, ...) {
   // TODO Establish whether we should intercept here if the flag contains
   // O_NONBLOCK
-  __rtsan_expect_not_realtime("openat");
+  RTSAN_EXPECT_NOT_REALTIME("openat");
 
   va_list args;
   va_start(args, oflag);
@@ -80,13 +82,13 @@ INTERCEPTOR(int, openat, int fd, const char *path, int oflag, ...) {
 INTERCEPTOR(int, creat, const char *path, mode_t mode) {
   // TODO Establish whether we should intercept here if the flag contains
   // O_NONBLOCK
-  __rtsan_expect_not_realtime("creat");
+  RTSAN_EXPECT_NOT_REALTIME("creat");
   const int result = REAL(creat)(path, mode);
   return result;
 }
 
 INTERCEPTOR(int, fcntl, int filedes, int cmd, ...) {
-  __rtsan_expect_not_realtime("fcntl");
+  RTSAN_EXPECT_NOT_REALTIME("fcntl");
 
   va_list args;
   va_start(args, cmd);
@@ -107,40 +109,40 @@ INTERCEPTOR(int, fcntl, int filedes, int cmd, ...) {
 }
 
 INTERCEPTOR(int, close, int filedes) {
-  __rtsan_expect_not_realtime("close");
+  RTSAN_EXPECT_NOT_REALTIME("close");
   return REAL(close)(filedes);
 }
 
 INTERCEPTOR(FILE *, fopen, const char *path, const char *mode) {
-  __rtsan_expect_not_realtime("fopen");
+  RTSAN_EXPECT_NOT_REALTIME("fopen");
   return REAL(fopen)(path, mode);
 }
 
 INTERCEPTOR(size_t, fread, void *ptr, size_t size, size_t nitems,
             FILE *stream) {
-  __rtsan_expect_not_realtime("fread");
+  RTSAN_EXPECT_NOT_REALTIME("fread");
   return REAL(fread)(ptr, size, nitems, stream);
 }
 
 INTERCEPTOR(size_t, fwrite, const void *ptr, size_t size, size_t nitems,
             FILE *stream) {
-  __rtsan_expect_not_realtime("fwrite");
+  RTSAN_EXPECT_NOT_REALTIME("fwrite");
   return REAL(fwrite)(ptr, size, nitems, stream);
 }
 
 INTERCEPTOR(int, fclose, FILE *stream) {
-  __rtsan_expect_not_realtime("fclose");
+  RTSAN_EXPECT_NOT_REALTIME("fclose");
   return REAL(fclose)(stream);
 }
 
 INTERCEPTOR(int, fputs, const char *s, FILE *stream) {
-  __rtsan_expect_not_realtime("fputs");
+  RTSAN_EXPECT_NOT_REALTIME("fputs");
   return REAL(fputs)(s, stream);
 }
 
 // Streams
 INTERCEPTOR(int, puts, const char *s) {
-  __rtsan_expect_not_realtime("puts");
+  RTSAN_EXPECT_NOT_REALTIME("puts");
   return REAL(puts)(s);
 }
 
@@ -181,139 +183,141 @@ INTERCEPTOR(ssize_t, writev, int fd, const struct iovec *iov, int iovcnt) {
 // OSSpinLockLock is deprecated, but still in use in libc++
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 INTERCEPTOR(void, OSSpinLockLock, volatile OSSpinLock *lock) {
-  __rtsan_expect_not_realtime("OSSpinLockLock");
+  RTSAN_EXPECT_NOT_REALTIME("OSSpinLockLock");
   return REAL(OSSpinLockLock)(lock);
 }
 #pragma clang diagnostic pop
 
 INTERCEPTOR(void, os_unfair_lock_lock, os_unfair_lock_t lock) {
-  __rtsan_expect_not_realtime("os_unfair_lock_lock");
+  RTSAN_EXPECT_NOT_REALTIME("os_unfair_lock_lock");
   return REAL(os_unfair_lock_lock)(lock);
 }
 #elif SANITIZER_LINUX
 INTERCEPTOR(int, pthread_spin_lock, pthread_spinlock_t *spinlock) {
-  __rtsan_expect_not_realtime("pthread_spin_lock");
+  RTSAN_EXPECT_NOT_REALTIME("pthread_spin_lock");
   return REAL(pthread_spin_lock)(spinlock);
 }
 #endif
 
 INTERCEPTOR(int, pthread_create, pthread_t *thread, const pthread_attr_t *attr,
             void *(*start_routine)(void *), void *arg) {
-  __rtsan_expect_not_realtime("pthread_create");
+  RTSAN_EXPECT_NOT_REALTIME("pthread_create");
   return REAL(pthread_create)(thread, attr, start_routine, arg);
 }
 
 INTERCEPTOR(int, pthread_mutex_lock, pthread_mutex_t *mutex) {
-  __rtsan_expect_not_realtime("pthread_mutex_lock");
+  if (__rtsan_is_initialized())
+    RTSAN_EXPECT_NOT_REALTIME("pthread_mutex_lock");
   return REAL(pthread_mutex_lock)(mutex);
 }
 
 INTERCEPTOR(int, pthread_mutex_unlock, pthread_mutex_t *mutex) {
-  __rtsan_expect_not_realtime("pthread_mutex_unlock");
+  if (__rtsan_is_initialized())
+    RTSAN_EXPECT_NOT_REALTIME("pthread_mutex_unlock");
   return REAL(pthread_mutex_unlock)(mutex);
 }
 
 INTERCEPTOR(int, pthread_join, pthread_t thread, void **value_ptr) {
-  __rtsan_expect_not_realtime("pthread_join");
+  RTSAN_EXPECT_NOT_REALTIME("pthread_join");
   return REAL(pthread_join)(thread, value_ptr);
 }
 
 INTERCEPTOR(int, pthread_cond_signal, pthread_cond_t *cond) {
-  __rtsan_expect_not_realtime("pthread_cond_signal");
+  RTSAN_EXPECT_NOT_REALTIME("pthread_cond_signal");
   return REAL(pthread_cond_signal)(cond);
 }
 
 INTERCEPTOR(int, pthread_cond_broadcast, pthread_cond_t *cond) {
-  __rtsan_expect_not_realtime("pthread_cond_broadcast");
+  RTSAN_EXPECT_NOT_REALTIME("pthread_cond_broadcast");
   return REAL(pthread_cond_broadcast)(cond);
 }
 
 INTERCEPTOR(int, pthread_cond_wait, pthread_cond_t *cond,
             pthread_mutex_t *mutex) {
-  __rtsan_expect_not_realtime("pthread_cond_wait");
+  RTSAN_EXPECT_NOT_REALTIME("pthread_cond_wait");
   return REAL(pthread_cond_wait)(cond, mutex);
 }
 
 INTERCEPTOR(int, pthread_cond_timedwait, pthread_cond_t *cond,
             pthread_mutex_t *mutex, const timespec *ts) {
-  __rtsan_expect_not_realtime("pthread_cond_timedwait");
+  RTSAN_EXPECT_NOT_REALTIME("pthread_cond_timedwait");
   return REAL(pthread_cond_timedwait)(cond, mutex, ts);
 }
 
 INTERCEPTOR(int, pthread_rwlock_rdlock, pthread_rwlock_t *lock) {
-  __rtsan_expect_not_realtime("pthread_rwlock_rdlock");
+  RTSAN_EXPECT_NOT_REALTIME("pthread_rwlock_rdlock");
   return REAL(pthread_rwlock_rdlock)(lock);
 }
 
 INTERCEPTOR(int, pthread_rwlock_unlock, pthread_rwlock_t *lock) {
-  __rtsan_expect_not_realtime("pthread_rwlock_unlock");
+  RTSAN_EXPECT_NOT_REALTIME("pthread_rwlock_unlock");
   return REAL(pthread_rwlock_unlock)(lock);
 }
 
 INTERCEPTOR(int, pthread_rwlock_wrlock, pthread_rwlock_t *lock) {
-  __rtsan_expect_not_realtime("pthread_rwlock_wrlock");
+  RTSAN_EXPECT_NOT_REALTIME("pthread_rwlock_wrlock");
   return REAL(pthread_rwlock_wrlock)(lock);
 }
 
 // Sleeping
 
 INTERCEPTOR(unsigned int, sleep, unsigned int s) {
-  __rtsan_expect_not_realtime("sleep");
+  RTSAN_EXPECT_NOT_REALTIME("sleep");
   return REAL(sleep)(s);
 }
 
 INTERCEPTOR(int, usleep, useconds_t u) {
-  __rtsan_expect_not_realtime("usleep");
+  RTSAN_EXPECT_NOT_REALTIME("usleep");
   return REAL(usleep)(u);
 }
 
 INTERCEPTOR(int, nanosleep, const struct timespec *rqtp,
             struct timespec *rmtp) {
-  __rtsan_expect_not_realtime("nanosleep");
+  RTSAN_EXPECT_NOT_REALTIME("nanosleep");
   return REAL(nanosleep)(rqtp, rmtp);
 }
 
 // Sockets
 INTERCEPTOR(int, socket, int domain, int type, int protocol) {
-  __rtsan_expect_not_realtime("socket");
+  RTSAN_EXPECT_NOT_REALTIME("socket");
   return REAL(socket)(domain, type, protocol);
 }
 
 INTERCEPTOR(ssize_t, send, int sockfd, const void *buf, size_t len, int flags) {
-  __rtsan_expect_not_realtime("send");
+  RTSAN_EXPECT_NOT_REALTIME("send");
   return REAL(send)(sockfd, buf, len, flags);
 }
 
 INTERCEPTOR(ssize_t, sendmsg, int socket, const struct msghdr *message,
             int flags) {
-  __rtsan_expect_not_realtime("sendmsg");
+  RTSAN_EXPECT_NOT_REALTIME("sendmsg");
   return REAL(sendmsg)(socket, message, flags);
 }
 
 INTERCEPTOR(ssize_t, sendto, int socket, const void *buffer, size_t length,
             int flags, const struct sockaddr *dest_addr, socklen_t dest_len) {
-  __rtsan_expect_not_realtime("sendto");
+  RTSAN_EXPECT_NOT_REALTIME("sendto");
   return REAL(sendto)(socket, buffer, length, flags, dest_addr, dest_len);
 }
 
 INTERCEPTOR(ssize_t, recv, int socket, void *buffer, size_t length, int flags) {
-  __rtsan_expect_not_realtime("recv");
+  RTSAN_EXPECT_NOT_REALTIME("recv");
   return REAL(recv)(socket, buffer, length, flags);
 }
 
 INTERCEPTOR(ssize_t, recvfrom, int socket, void *buffer, size_t length,
             int flags, struct sockaddr *address, socklen_t *address_len) {
-  __rtsan_expect_not_realtime("recvfrom");
+  RTSAN_EXPECT_NOT_REALTIME("recvfrom");
   return REAL(recvfrom)(socket, buffer, length, flags, address, address_len);
 }
 
 INTERCEPTOR(ssize_t, recvmsg, int socket, struct msghdr *message, int flags) {
-  __rtsan_expect_not_realtime("recvmsg");
+  RTSAN_EXPECT_NOT_REALTIME("recvmsg");
   return REAL(recvmsg)(socket, message, flags);
 }
 
 INTERCEPTOR(int, shutdown, int socket, int how) {
-  __rtsan_expect_not_realtime("shutdown");
+  RTSAN_EXPECT_NOT_REALTIME("shutdown");
   return REAL(shutdown)(socket, how);
 }
 

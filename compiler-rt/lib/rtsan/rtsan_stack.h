@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include <sanitizer_common/sanitizer_internal_defs.h>
+#include "sanitizer_common/sanitizer_internal_defs.h"
 
 namespace __rtsan {
 void PrintStackTrace(__sanitizer::uptr pc, __sanitizer::uptr bp);

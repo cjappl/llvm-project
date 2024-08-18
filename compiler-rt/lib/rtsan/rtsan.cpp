@@ -13,6 +13,8 @@
 #include <rtsan/rtsan_context.h>
 #include <rtsan/rtsan_flags.h>
 #include <rtsan/rtsan_interceptors.h>
+#include <rtsan/rtsan_internal.h>
+#include <rtsan/rtsan_stack.h>
 
 #include "sanitizer_common/sanitizer_atomic.h"
 #include "sanitizer_common/sanitizer_common.h"
@@ -24,10 +26,57 @@ using namespace __sanitizer;
 static StaticSpinMutex rtsan_inited_mutex;
 static atomic_uint8_t rtsan_initialized = {0};
 
+static const unsigned rtsan_buggy_pc_pool_size = 25;
+static atomic_uintptr_t rtsan_buggy_pc_pool[rtsan_buggy_pc_pool_size];
+
 static void SetInitialized() {
   atomic_store(&rtsan_initialized, 1, memory_order_release);
 }
 
+static void PrintDiagnostics(const char *intercepted_function_name, uptr pc,
+                             uptr bp) {
+  ScopedErrorReportLock l;
+
+  Report("Real-time violation: intercepted call to real-time unsafe function "
+         "`%s` in real-time context! Stack trace:\n",
+         intercepted_function_name);
+  PrintStackTrace(pc, bp);
+}
+
+static bool SuppressErrorReport(uptr pc) {
+  for (unsigned i = 0; i < rtsan_buggy_pc_pool_size; i++) {
+    uptr cmp = atomic_load_relaxed(&rtsan_buggy_pc_pool[i]);
+    if (cmp == 0 &&
+        atomic_compare_exchange_strong(&rtsan_buggy_pc_pool[i], &cmp, pc,
+                                       memory_order_relaxed))
+      return false;
+    if (cmp == pc)
+      return true;
+  }
+  Die();
+}
+
+void __rtsan::InternalExpectNotRealtime(Context &context,
+                                        const char *intercepted_function_name,
+                                        uptr pc, uptr bc) {
+  __rtsan_ensure_initialized();
+
+  if (context.InRealtimeContext() && !context.IsBypassed()) {
+    context.BypassPush();
+    IncrementTotalErrorCount();
+
+    if (!SuppressErrorReport(pc)) {
+      IncrementUniqueErrorCount();
+
+      PrintDiagnostics(intercepted_function_name, pc, bc);
+
+      if (flags().halt_on_error)
+        Die();
+    }
+
+    context.BypassPop();
+  }
+}
 extern "C" {
 
 SANITIZER_INTERFACE_ATTRIBUTE void __rtsan_init() {

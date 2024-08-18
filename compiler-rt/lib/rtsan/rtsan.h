@@ -42,6 +42,8 @@ SANITIZER_INTERFACE_ATTRIBUTE void __rtsan_disable();
 // See documentation in rtsan_interface.h.
 SANITIZER_INTERFACE_ATTRIBUTE void __rtsan_enable();
 
+// Expect that the intercepted function is not called in a real-time context.
+// If using internal to RTSan, use the `RTSAN_EXPECT_NOT_REALTIME` macro.
 SANITIZER_INTERFACE_ATTRIBUTE void
 __rtsan_expect_not_realtime(const char *intercepted_function_name);
 

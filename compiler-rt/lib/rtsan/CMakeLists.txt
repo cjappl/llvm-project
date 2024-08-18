@@ -17,6 +17,7 @@ set(RTSAN_HEADERS
   rtsan_context.h
   rtsan_flags.h
   rtsan_flags.inc
+  rtsan_internal.h
   rtsan_stack.h
   )
 

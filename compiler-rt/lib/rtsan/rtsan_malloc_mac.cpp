@@ -19,6 +19,7 @@
 
 #include "rtsan/rtsan.h"
 #include "rtsan/rtsan_interceptors.h"
+#include "rtsan/rtsan_internal.h"
 
 #include <cstdlib>
 
@@ -36,19 +37,19 @@ using namespace __sanitizer;
 #define COMMON_MALLOC_FORCE_LOCK()
 #define COMMON_MALLOC_FORCE_UNLOCK()
 #define COMMON_MALLOC_FREE(ptr)                                                \
-  __rtsan_expect_not_realtime("free");                                         \
+  RTSAN_EXPECT_NOT_REALTIME("free");                                           \
   return REAL(malloc_zone_free)(malloc_default_zone(), ptr);
 #define COMMON_MALLOC_MALLOC(size)                                             \
-  __rtsan_expect_not_realtime("malloc");                                       \
+  RTSAN_EXPECT_NOT_REALTIME("malloc");                                         \
   void *p = REAL(malloc_zone_malloc)(malloc_default_zone(), size);
 #define COMMON_MALLOC_REALLOC(ptr, size)                                       \
-  __rtsan_expect_not_realtime("realloc");                                      \
+  RTSAN_EXPECT_NOT_REALTIME("realloc");                                        \
   void *p = REAL(malloc_zone_realloc)(malloc_default_zone(), ptr, size);
 #define COMMON_MALLOC_CALLOC(count, size)                                      \
-  __rtsan_expect_not_realtime("calloc");                                       \
+  RTSAN_EXPECT_NOT_REALTIME("calloc");                                         \
   void *p = REAL(malloc_zone_calloc)(malloc_default_zone(), count, size);
 #define COMMON_MALLOC_POSIX_MEMALIGN(memptr, alignment, size)                  \
-  __rtsan_expect_not_realtime("posix_memalign");                               \
+  RTSAN_EXPECT_NOT_REALTIME("posix_memalign");                                 \
   int res = 0;                                                                 \
   if (UNLIKELY(!IsPowerOfTwo(alignment))) {                                    \
     memptr = nullptr;                                                          \
@@ -64,19 +65,19 @@ using namespace __sanitizer;
       *memptr = ptr;                                                           \
   }
 #define COMMON_MALLOC_VALLOC(size)                                             \
-  __rtsan_expect_not_realtime("valloc");                                       \
+  RTSAN_EXPECT_NOT_REALTIME("valloc");                                         \
   void *p = REAL(malloc_zone_valloc)(malloc_default_zone(), size);
 #define COMMON_MALLOC_MALLOC_ZONE_ENUMERATOR(zone_name, zone_ptr)
 #define COMMON_MALLOC_SIZE(ptr) uptr size = REAL(malloc_size)(ptr);
 #define COMMON_MALLOC_FILL_STATS(zone, stats)                                  \
   REAL(malloc_zone_statistics)(zone, stats);
 #define COMMON_MALLOC_REPORT_UNKNOWN_REALLOC(ptr, zone_ptr, zone_name)         \
-  __rtsan_expect_not_realtime(__func__);                                       \
+  RTSAN_EXPECT_NOT_REALTIME(__func__);                                         \
   Report("mz_realloc(%p) -- attempting to realloc unallocated memory. Zone "   \
          "name: %s\n",                                                         \
          ptr, zone_name);
 #define COMMON_MALLOC_MEMALIGN(alignment, size)                                \
-  __rtsan_expect_not_realtime(__func__);                                       \
+  RTSAN_EXPECT_NOT_REALTIME(__func__);                                         \
   void *p = REAL(malloc_zone_memalign)(malloc_default_zone(), alignment, size);
 #define COMMON_MALLOC_NAMESPACE __rtsan
 #define COMMON_MALLOC_HAS_ZONE_ENUMERATOR 0

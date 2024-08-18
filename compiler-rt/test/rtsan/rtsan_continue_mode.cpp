@@ -19,6 +19,6 @@ int main() {
   process();
   return 0;
   // CHECK: {{.*Real-time violation.*}}
-  // CHECK: {{.*malloc*}}
-  // CHECK: {{.*free*}}
+  // CHECK: {{.*MallocViolation*}}
+  // CHECK: {{.*FreeViolation*}}
 }

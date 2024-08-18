@@ -26,8 +26,10 @@
 
 #include "rtsan/rtsan.h"
 #include "rtsan/rtsan_interceptors.h"
+#include "rtsan/rtsan_internal.h"
 
 using namespace __sanitizer;
+using namespace __rtsan;
 
 namespace {
 struct DlsymAlloc : public DlSymAllocator<DlsymAlloc> {
@@ -39,7 +41,7 @@ INTERCEPTOR(void *, calloc, SIZE_T num, SIZE_T size) {
   if (DlsymAlloc::Use())
     return DlsymAlloc::Callocate(num, size);
 
-  __rtsan_expect_not_realtime("calloc");
+  RTSAN_EXPECT_NOT_REALTIME("calloc");
   return REAL(calloc)(num, size);
 }
 
@@ -48,7 +50,7 @@ INTERCEPTOR(void, free, void *ptr) {
     return DlsymAlloc::Free(ptr);
 
   if (ptr != nullptr)
-    __rtsan_expect_not_realtime("free");
+    RTSAN_EXPECT_NOT_REALTIME("free");
 
   return REAL(free)(ptr);
 }
@@ -57,7 +59,7 @@ INTERCEPTOR(void *, malloc, SIZE_T size) {
   if (DlsymAlloc::Use())
     return DlsymAlloc::Allocate(size);
 
-  __rtsan_expect_not_realtime("malloc");
+  RTSAN_EXPECT_NOT_REALTIME("malloc");
   return REAL(malloc)(size);
 }
 
@@ -65,40 +67,40 @@ INTERCEPTOR(void *, realloc, void *ptr, SIZE_T size) {
   if (DlsymAlloc::Use() || DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Realloc(ptr, size);
 
-  __rtsan_expect_not_realtime("realloc");
+  RTSAN_EXPECT_NOT_REALTIME("realloc");
   return REAL(realloc)(ptr, size);
 }
 
 INTERCEPTOR(void *, reallocf, void *ptr, SIZE_T size) {
-  __rtsan_expect_not_realtime("reallocf");
+  RTSAN_EXPECT_NOT_REALTIME("reallocf");
   return REAL(reallocf)(ptr, size);
 }
 
 INTERCEPTOR(void *, valloc, SIZE_T size) {
-  __rtsan_expect_not_realtime("valloc");
+  RTSAN_EXPECT_NOT_REALTIME("valloc");
   return REAL(valloc)(size);
 }
 
 INTERCEPTOR(void *, aligned_alloc, SIZE_T alignment, SIZE_T size) {
-  __rtsan_expect_not_realtime("aligned_alloc");
+  RTSAN_EXPECT_NOT_REALTIME("aligned_alloc");
   return REAL(aligned_alloc)(alignment, size);
 }
 
 INTERCEPTOR(int, posix_memalign, void **memptr, SIZE_T alignment, SIZE_T size) {
-  __rtsan_expect_not_realtime("posix_memalign");
+  RTSAN_EXPECT_NOT_REALTIME("posix_memalign");
   return REAL(posix_memalign)(memptr, alignment, size);
 }
 
 #if SANITIZER_INTERCEPT_MEMALIGN
 INTERCEPTOR(void *, memalign, SIZE_T alignment, SIZE_T size) {
-  __rtsan_expect_not_realtime("memalign");
+  RTSAN_EXPECT_NOT_REALTIME("memalign");
   return REAL(memalign)(alignment, size);
 }
 #endif // SANITIZER_INTERCEPT_MEMALIGN
 
 #if SANITIZER_INTERCEPT_PVALLOC
 INTERCEPTOR(void *, pvalloc, SIZE_T size) {
-  __rtsan_expect_not_realtime("pvalloc");
+  RTSAN_EXPECT_NOT_REALTIME("pvalloc");
   return REAL(pvalloc)(size);
 }
 #endif
