@@ -49,3 +49,5 @@ int main() {
 // CHECK-NEXT:  {{.*MallocViolation2.*}}
 
 // CHECK-LABEL: {{.*RealtimeSanitizer exit stats:.*}}
+// CHECK-NEXT: {{.*Total error count: 48.*}}
+// CHECK-NEXT: {{.*Unique error count: 3.*}}

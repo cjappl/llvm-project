@@ -29,6 +29,25 @@ static atomic_uint8_t rtsan_initialized = {0};
 static const unsigned rtsan_buggy_pc_pool_size = 25;
 static atomic_uintptr_t rtsan_buggy_pc_pool[rtsan_buggy_pc_pool_size];
 
+static atomic_uint32_t rtsan_total_error_count{0};
+static atomic_uint32_t rtsan_unique_error_count{0};
+
+static void IncrementTotalErrorCount() {
+  atomic_fetch_add(&rtsan_total_error_count, 1, memory_order_relaxed);
+}
+
+static u32 GetTotalErrorCount() {
+  return atomic_load(&rtsan_total_error_count, memory_order_relaxed);
+}
+
+static void IncrementUniqueErrorCount() {
+  atomic_fetch_add(&rtsan_unique_error_count, 1, memory_order_relaxed);
+}
+
+static u32 GetUniqueErrorCount() {
+  return atomic_load(&rtsan_unique_error_count, memory_order_relaxed);
+}
+
 static void SetInitialized() {
   atomic_store(&rtsan_initialized, 1, memory_order_release);
 }
@@ -77,6 +96,14 @@ void __rtsan::InternalExpectNotRealtime(Context &context,
     context.BypassPop();
   }
 }
+
+static void rtsan_atexit() {
+  ScopedErrorReportLock l;
+  Printf("RealtimeSanitizer exit stats:\n");
+  Printf("    Total error count: %u\n", GetTotalErrorCount());
+  Printf("    Unique error count: %u\n", GetUniqueErrorCount());
+}
+
 extern "C" {
 
 SANITIZER_INTERFACE_ATTRIBUTE void __rtsan_init() {
@@ -85,6 +112,9 @@ SANITIZER_INTERFACE_ATTRIBUTE void __rtsan_init() {
   SanitizerToolName = "RealtimeSanitizer";
   InitializeFlags();
   InitializeInterceptors();
+
+  if (flags().print_stats_on_exit)
+    Atexit(rtsan_atexit);
 
   SetInitialized();
 }
