@@ -1,4 +1,4 @@
-; RUN: opt < %s -passes=rtsan -S | FileCheck %s
+; RUN: opt < %s -passes='sanitize-unbound-loops' -S | FileCheck %s
 
 %class.SpinLockTestAndSet = type { %"struct.std::__1::atomic_flag" }
 %"struct.std::__1::atomic_flag" = type { %"struct.std::__1::__cxx_atomic_impl" }
@@ -25,6 +25,4 @@ SpinlockTestAndSet.exit:              ; preds = %while.cond.i
 
 attributes #0 = { sanitize_realtime }
 
-; CHECK: call{{.*}}@__rtsan_realtime_enter
 ; CHECK: call{{.*}}@__rtsan_expect_not_realtime
-; CHECK: call{{.*}}@__rtsan_realtime_exit

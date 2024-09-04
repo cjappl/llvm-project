@@ -1,4 +1,4 @@
-; RUN: opt < %s -passes='rtsan' -S | FileCheck %s
+; RUN: opt < %s -passes='sroa,sanitize-unbound-loops' -S | FileCheck %s
 
 
 define void @procces(ptr noundef %buffer, i32 noundef %size) #0 {
@@ -40,9 +40,4 @@ for.end:                                          ; preds = %for.cond
 attributes #0 = { sanitize_realtime }
 
 ; In this simple loop, we should not insert rtsan_expect_not_realtime
-; CHECK: call{{.*}}@__rtsan_realtime_enter
-
-; TODO: This test fails when it shouldn't!!
-; XXXXX--CHECK-NOT: call{{.*}}@__rtsan_expect_not_realtime
-
-; CHECK: call{{.*}}@__rtsan_realtime_exit
+; CHECK-NOT: call{{.*}}@__rtsan_expect_not_realtime
