@@ -1,4 +1,4 @@
-; RUN: opt < %s -passes='sroa,sanitize-unbound-loops' -S | FileCheck %s
+; RUN: opt < %s -passes='sroa,rtsan' -S | FileCheck %s
 
 
 define void @procces(ptr noundef %buffer, i32 noundef %size) #0 {

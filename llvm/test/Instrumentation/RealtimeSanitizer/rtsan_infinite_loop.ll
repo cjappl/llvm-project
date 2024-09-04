@@ -1,4 +1,4 @@
-; RUN: opt < %s -passes='sanitize-unbound-loops' -S | FileCheck %s
+; RUN: opt < %s -passes=rtsan -S | FileCheck %s
 
 define void @process() #0 {
 entry:

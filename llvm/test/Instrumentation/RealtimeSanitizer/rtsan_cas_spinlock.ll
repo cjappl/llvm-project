@@ -1,4 +1,4 @@
-; RUN: opt < %s -passes='sanitize-unbound-loops' -S | FileCheck %s
+; RUN: opt < %s -passes=rtsan -S | FileCheck %s
 
 %class.SpinLockTestAndSet = type { %"struct.std::__1::atomic_flag" }
 %"struct.std::__1::atomic_flag" = type { %"struct.std::__1::__cxx_atomic_impl" }

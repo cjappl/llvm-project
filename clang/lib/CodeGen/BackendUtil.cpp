@@ -86,6 +86,7 @@
 #include "llvm/Transforms/Scalar/EarlyCSE.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/Transforms/Scalar/JumpThreading.h"
+#include "llvm/Transforms/Scalar/SROA.h"
 #include "llvm/Transforms/Utils/Debugify.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 #include <memory>
@@ -992,13 +993,10 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
           });
 
     if (LangOpts.Sanitize.has(SanitizerKind::Realtime)) {
-      PB.registerLoopOptimizerEndEPCallback(
-          [](LoopPassManager &LPM, OptimizationLevel Level) {
-            LPM.addPass(RealtimeSanitizerLoopPass());
-          });
       PB.registerScalarOptimizerLateEPCallback(
           [](FunctionPassManager &FPM, OptimizationLevel Level) {
             RealtimeSanitizerOptions Opts;
+            FPM.addPass(SROAPass(SROAOptions::PreserveCFG));
             FPM.addPass(RealtimeSanitizerPass(Opts));
           });
     }

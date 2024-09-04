@@ -63,54 +63,49 @@ RealtimeSanitizerPass::RealtimeSanitizerPass(
 
 PreservedAnalyses RealtimeSanitizerPass::run(Function &F,
                                              AnalysisManager<Function> &AM) {
+  PreservedAnalyses PA = PreservedAnalyses::all();
   if (F.hasFnAttribute(Attribute::SanitizeRealtime)) {
     insertCallAtFunctionEntryPoint(F, "__rtsan_realtime_enter");
     insertCallAtAllFunctionExitPoints(F, "__rtsan_realtime_exit");
-
-    PreservedAnalyses PA;
+    PA = PreservedAnalyses::none();
     PA.preserveSet<CFGAnalyses>();
-    return PA;
   }
 
-  return PreservedAnalyses::all();
-}
+  const LoopInfo &LI = AM.getResult<LoopAnalysis>(F);
+  ScalarEvolution &SE = AM.getResult<ScalarEvolutionAnalysis>(F);
+  for (Loop *L : LI) {
+      BasicBlock *Context =
+          L->getLoopPreheader() ? L->getLoopPreheader() : L->getHeader();
+      assert(Context && "Loop has no preheader or header block");
 
-PreservedAnalyses
-RealtimeSanitizerLoopPass::run(Loop &L, LoopAnalysisManager &AM,
-                               LoopStandardAnalysisResults &AR, LPMUpdater &U) {
-  BasicBlock *Context =
-      L.getLoopPreheader() ? L.getLoopPreheader() : L.getHeader();
-  assert(Context && "Loop has no preheader or header block");
+    const bool HasNoExits = L->hasNoExitBlocks();
+    const bool CannotPredictLoopCount =
+        isa<SCEVCouldNotCompute>(SE.getConstantMaxBackedgeTakenCount(L)) ||
+        isa<SCEVCouldNotCompute>(SE.getBackedgeTakenCount(L));
+    const bool LoopIsPotentiallyUnbound = HasNoExits || CannotPredictLoopCount;
 
-  Function *F = Context->getParent();
-  assert(F && "Loop has no parent function");
+    if (LoopIsPotentiallyUnbound) {
+      IRBuilder<> Builder{&Context->back()};
 
-  const bool HasNoExits = L.hasNoExitBlocks();
-  const bool CannotPredictLoopCount =
-      isa<SCEVCouldNotCompute>(AR.SE.getConstantMaxBackedgeTakenCount(&L)) ||
-      isa<SCEVCouldNotCompute>(AR.SE.getBackedgeTakenCount(&L));
-  const bool LoopIsPotentiallyUnbound = HasNoExits || CannotPredictLoopCount;
-
-  if (LoopIsPotentiallyUnbound) {
-    IRBuilder<> Builder{&Context->back()};
 
     std::string ReasonStr =
-        demangle(F->getName().str()) + " contains a possibly unbounded loop ";
+        demangle(F.getName().str()) + " contains a possibly unbounded loop ";
 
-    if (HasNoExits)
-      ReasonStr += "(reason: no exit blocks).";
-    else if (CannotPredictLoopCount)
-      ReasonStr += "(reason: backedge taken count cannot be computed).";
-    else
-      assert(false);
+      if (HasNoExits)
+        ReasonStr += "(reason: no exit blocks).";
+      else if (CannotPredictLoopCount)
+        ReasonStr += "(reason: backedge taken count cannot be computed).";
+      else
+        assert(false);
 
-    Value *Reason = Builder.CreateGlobalStringPtr(ReasonStr);
-    insertCallBeforeInstruction(*F, Builder, "__rtsan_expect_not_realtime",
-                                {Reason});
+      Value *Reason = Builder.CreateGlobalStringPtr(ReasonStr);
+      insertCallBeforeInstruction(F, Builder, "__rtsan_expect_not_realtime",
+                                  {Reason});
 
-    // TODO: What is preserved here??
-    return PreservedAnalyses::none();
+      // TODO: What is preserved here??
+      PA = PreservedAnalyses::none();
+    }
   }
 
-  return PreservedAnalyses::all();
+  return PA;
 }
