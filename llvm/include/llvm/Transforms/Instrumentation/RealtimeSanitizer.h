@@ -22,7 +22,6 @@
 #include "llvm/IR/PassManager.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
 
-
 namespace llvm {
 
 struct RealtimeSanitizerOptions {};
@@ -40,7 +39,6 @@ struct RealtimeSanitizerLoopPass : PassInfoMixin<RealtimeSanitizerLoopPass> {
                         LoopStandardAnalysisResults &AR, LPMUpdater &U);
   static bool isRequired() { return true; }
 };
-
 
 } // namespace llvm
 

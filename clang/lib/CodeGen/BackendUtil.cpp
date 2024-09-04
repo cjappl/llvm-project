@@ -992,7 +992,6 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
           });
 
     if (LangOpts.Sanitize.has(SanitizerKind::Realtime)) {
-      fprintf(stderr, "Adding RealtimeSanitizerPass\n");
       PB.registerLoopOptimizerEndEPCallback(
         [](LoopPassManager &LPM, OptimizationLevel Level) {
           LPM.addPass(RealtimeSanitizerLoopPass());

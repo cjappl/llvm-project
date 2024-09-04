@@ -5,9 +5,8 @@
 // RUN: %clangxx -fsanitize=realtime %s -o %t -O1
 // RUN: %run %t 2>&1 | FileCheck %s --allow-empty
 
-// TODO: this test is failing with O0, investigate why
-// xxx: %clangxx -fsanitize=realtime %s -o %t -O0
-// xxx: %run %t 2>&1 | FileCheck %s
+// RUN: %clangxx -fsanitize=realtime %s -o %t -O0
+// RUN: %run %t 2>&1 | FileCheck %s --allow-empty
 
 // UNSUPPORTED: ios
 

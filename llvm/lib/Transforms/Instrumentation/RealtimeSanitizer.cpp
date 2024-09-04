@@ -63,15 +63,16 @@ RealtimeSanitizerPass::RealtimeSanitizerPass(
 
 PreservedAnalyses RealtimeSanitizerPass::run(Function &F,
                                              AnalysisManager<Function> &AM) {
-  PreservedAnalyses PA = PreservedAnalyses::all();
   if (F.hasFnAttribute(Attribute::SanitizeRealtime)) {
     insertCallAtFunctionEntryPoint(F, "__rtsan_realtime_enter");
     insertCallAtAllFunctionExitPoints(F, "__rtsan_realtime_exit");
-    PA = PreservedAnalyses::none();
+
+    PreservedAnalyses PA;
     PA.preserveSet<CFGAnalyses>();
+    return PA;
   }
 
-  return PA;
+  return PreservedAnalyses::all();
 }
 
 PreservedAnalyses RealtimeSanitizerLoopPass::run(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR, LPMUpdater &U) {
