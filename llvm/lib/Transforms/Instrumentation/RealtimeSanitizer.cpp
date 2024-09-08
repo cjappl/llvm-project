@@ -84,7 +84,7 @@ PreservedAnalyses RealtimeSanitizerLoopPass::run(Loop &L, LoopAnalysisManager &A
   assert(F && "Loop has no parent function");
 
   const bool HasNoExits = L.hasNoExitBlocks();
-  const bool CannotPredictLoopCount = isa<SCEVCouldNotCompute>(AR.SE.getConstantMaxBackedgeTakenCount(&L)) &&
+  const bool CannotPredictLoopCount = isa<SCEVCouldNotCompute>(AR.SE.getConstantMaxBackedgeTakenCount(&L)) ||
         isa<SCEVCouldNotCompute>(AR.SE.getBackedgeTakenCount(&L));
   const bool LoopIsPotentiallyUnbound = HasNoExits || CannotPredictLoopCount;
 
