@@ -74,9 +74,9 @@ PreservedAnalyses RealtimeSanitizerPass::run(Function &F,
   const LoopInfo &LI = AM.getResult<LoopAnalysis>(F);
   ScalarEvolution &SE = AM.getResult<ScalarEvolutionAnalysis>(F);
   for (Loop *L : LI) {
-      BasicBlock *Context =
-          L->getLoopPreheader() ? L->getLoopPreheader() : L->getHeader();
-      assert(Context && "Loop has no preheader or header block");
+    BasicBlock *Context =
+        L->getLoopPreheader() ? L->getLoopPreheader() : L->getHeader();
+    assert(Context && "Loop has no preheader or header block");
 
     const bool HasNoExits = L->hasNoExitBlocks();
     const bool CannotPredictLoopCount =
@@ -87,9 +87,8 @@ PreservedAnalyses RealtimeSanitizerPass::run(Function &F,
     if (LoopIsPotentiallyUnbound) {
       IRBuilder<> Builder{&Context->back()};
 
-
-    std::string ReasonStr =
-        demangle(F.getName().str()) + " contains a possibly unbounded loop ";
+      std::string ReasonStr =
+          demangle(F.getName().str()) + " contains a possibly unbounded loop ";
 
       if (HasNoExits)
         ReasonStr += "(reason: no exit blocks).";
