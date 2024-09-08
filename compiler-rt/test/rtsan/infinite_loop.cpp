@@ -8,7 +8,8 @@
 #include <stdlib.h>
 
 void infinity() [[clang::nonblocking]] {
-  while(true);
+  while (true)
+    ;
 }
 
 int main() {

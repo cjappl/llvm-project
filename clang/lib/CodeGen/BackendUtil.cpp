@@ -993,9 +993,9 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
 
     if (LangOpts.Sanitize.has(SanitizerKind::Realtime)) {
       PB.registerLoopOptimizerEndEPCallback(
-        [](LoopPassManager &LPM, OptimizationLevel Level) {
-          LPM.addPass(RealtimeSanitizerLoopPass());
-        });
+          [](LoopPassManager &LPM, OptimizationLevel Level) {
+            LPM.addPass(RealtimeSanitizerLoopPass());
+          });
       PB.registerScalarOptimizerLateEPCallback(
           [](FunctionPassManager &FPM, OptimizationLevel Level) {
             RealtimeSanitizerOptions Opts;

@@ -75,17 +75,20 @@ PreservedAnalyses RealtimeSanitizerPass::run(Function &F,
   return PreservedAnalyses::all();
 }
 
-PreservedAnalyses RealtimeSanitizerLoopPass::run(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR, LPMUpdater &U) {
+PreservedAnalyses
+RealtimeSanitizerLoopPass::run(Loop &L, LoopAnalysisManager &AM,
+                               LoopStandardAnalysisResults &AR, LPMUpdater &U) {
   BasicBlock *Context =
       L.getLoopPreheader() ? L.getLoopPreheader() : L.getHeader();
   assert(Context && "Loop has no preheader or header block");
 
-  Function* F = Context->getParent();
+  Function *F = Context->getParent();
   assert(F && "Loop has no parent function");
 
   const bool HasNoExits = L.hasNoExitBlocks();
-  const bool CannotPredictLoopCount = isa<SCEVCouldNotCompute>(AR.SE.getConstantMaxBackedgeTakenCount(&L)) ||
-        isa<SCEVCouldNotCompute>(AR.SE.getBackedgeTakenCount(&L));
+  const bool CannotPredictLoopCount =
+      isa<SCEVCouldNotCompute>(AR.SE.getConstantMaxBackedgeTakenCount(&L)) ||
+      isa<SCEVCouldNotCompute>(AR.SE.getBackedgeTakenCount(&L));
   const bool LoopIsPotentiallyUnbound = HasNoExits || CannotPredictLoopCount;
 
   if (LoopIsPotentiallyUnbound) {
@@ -107,8 +110,7 @@ PreservedAnalyses RealtimeSanitizerLoopPass::run(Loop &L, LoopAnalysisManager &A
 
     // TODO: What is preserved here??
     return PreservedAnalyses::none();
-    }
+  }
 
   return PreservedAnalyses::all();
 }
-

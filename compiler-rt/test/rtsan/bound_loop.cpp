@@ -17,23 +17,24 @@
 
 #include <assert.h>
 
-
-void FillBufferInterleaved(int* buffer, int sample_count, int channel_count) [[clang::nonblocking]] {
+void FillBufferInterleaved(int *buffer, int sample_count, int channel_count)
+    [[clang::nonblocking]] {
   for (int sample = 0; sample < sample_count; sample++)
     for (int channel = 0; channel < channel_count; channel++)
       buffer[sample * channel_count + channel] = sample;
 }
 
-void Deinterleave(int* buffer, int sample_count, int channel_count, int* scratch_buffer) [[clang::nonblocking]] {
+void Deinterleave(int *buffer, int sample_count, int channel_count,
+                  int *scratch_buffer) [[clang::nonblocking]] {
   for (int channel = 0; channel < channel_count; channel++)
     for (int sample = 0; sample < sample_count; sample++) {
-          int interleaved_index = sample * channel_count + channel;
-          int deinterleaved_index = channel * sample_count + sample;
-          scratch_buffer[deinterleaved_index] = buffer[interleaved_index];
-      }
+      int interleaved_index = sample * channel_count + channel;
+      int deinterleaved_index = channel * sample_count + sample;
+      scratch_buffer[deinterleaved_index] = buffer[interleaved_index];
+    }
 
   for (int i = 0; i < sample_count * channel_count; i++)
-      buffer[i] = scratch_buffer[i];
+    buffer[i] = scratch_buffer[i];
 }
 
 int main() {

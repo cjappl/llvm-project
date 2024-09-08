@@ -17,8 +17,8 @@
 
 #include <assert.h>
 
-
-void BadScalarEvolution(int* buffer, int sample_count, int channel_count) [[clang::nonblocking]] {
+void BadScalarEvolution(int *buffer, int sample_count, int channel_count)
+    [[clang::nonblocking]] {
 
   int sample = 0;
   while (sample < sample_count) {
