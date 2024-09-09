@@ -991,12 +991,17 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
             FPM.addPass(BoundsCheckingPass());
           });
 
-    if (LangOpts.Sanitize.has(SanitizerKind::Realtime))
+    if (LangOpts.Sanitize.has(SanitizerKind::Realtime)) {
+      PB.registerLoopOptimizerEndEPCallback(
+          [](LoopPassManager &LPM, OptimizationLevel Level) {
+            LPM.addPass(RealtimeSanitizerLoopPass());
+          });
       PB.registerScalarOptimizerLateEPCallback(
           [](FunctionPassManager &FPM, OptimizationLevel Level) {
             RealtimeSanitizerOptions Opts;
             FPM.addPass(RealtimeSanitizerPass(Opts));
           });
+    }
 
     // Don't add sanitizers if we are here from ThinLTO PostLink. That already
     // done on PreLink stage.

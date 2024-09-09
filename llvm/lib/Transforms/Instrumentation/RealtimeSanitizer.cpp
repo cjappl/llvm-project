@@ -13,36 +13,49 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/IR/Analysis.h"
+#include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/ScalarEvolution.h"
+#include "llvm/Demangle/Demangle.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "llvm/Transforms/Instrumentation/RealtimeSanitizer.h"
 
 using namespace llvm;
 
-static void insertCallBeforeInstruction(Function &Fn, Instruction &Instruction,
-                                        const char *FunctionName) {
-  LLVMContext &Context = Fn.getContext();
-  FunctionType *FuncType = FunctionType::get(Type::getVoidTy(Context), false);
+static void insertCallBeforeInstruction(Function &CallingFn,
+                                        IRBuilder<> &Builder,
+                                        const char *FunctionName,
+                                        ArrayRef<Value *> FunctionArgs) {
+  std::vector<Type *> FunctionArgTypes;
+  FunctionArgTypes.reserve(FunctionArgs.size());
+  for (Value *Arg : FunctionArgs)
+    FunctionArgTypes.push_back(Arg->getType());
+
+  FunctionType *FuncType = FunctionType::get(
+      Type::getVoidTy(CallingFn.getContext()), FunctionArgTypes, false);
   FunctionCallee Func =
-      Fn.getParent()->getOrInsertFunction(FunctionName, FuncType);
-  IRBuilder<> Builder{&Instruction};
-  Builder.CreateCall(Func, {});
+      CallingFn.getParent()->getOrInsertFunction(FunctionName, FuncType);
+  Builder.CreateCall(Func, FunctionArgs);
 }
 
 static void insertCallAtFunctionEntryPoint(Function &Fn,
                                            const char *InsertFnName) {
 
-  insertCallBeforeInstruction(Fn, Fn.front().front(), InsertFnName);
+  IRBuilder<> Builder{&Fn.front().front()};
+  insertCallBeforeInstruction(Fn, Builder, InsertFnName, std::nullopt);
 }
 
 static void insertCallAtAllFunctionExitPoints(Function &Fn,
                                               const char *InsertFnName) {
   for (auto &BB : Fn)
     for (auto &I : BB)
-      if (isa<ReturnInst>(&I))
-        insertCallBeforeInstruction(Fn, I, InsertFnName);
+      if (isa<ReturnInst>(&I)) {
+        IRBuilder<> Builder{&I};
+        insertCallBeforeInstruction(Fn, Builder, InsertFnName, std::nullopt);
+      }
 }
 
 RealtimeSanitizerPass::RealtimeSanitizerPass(
@@ -57,6 +70,46 @@ PreservedAnalyses RealtimeSanitizerPass::run(Function &F,
     PreservedAnalyses PA;
     PA.preserveSet<CFGAnalyses>();
     return PA;
+  }
+
+  return PreservedAnalyses::all();
+}
+
+PreservedAnalyses
+RealtimeSanitizerLoopPass::run(Loop &L, LoopAnalysisManager &AM,
+                               LoopStandardAnalysisResults &AR, LPMUpdater &U) {
+  BasicBlock *Context =
+      L.getLoopPreheader() ? L.getLoopPreheader() : L.getHeader();
+  assert(Context && "Loop has no preheader or header block");
+
+  Function *F = Context->getParent();
+  assert(F && "Loop has no parent function");
+
+  const bool HasNoExits = L.hasNoExitBlocks();
+  const bool CannotPredictLoopCount =
+      isa<SCEVCouldNotCompute>(AR.SE.getConstantMaxBackedgeTakenCount(&L)) ||
+      isa<SCEVCouldNotCompute>(AR.SE.getBackedgeTakenCount(&L));
+  const bool LoopIsPotentiallyUnbound = HasNoExits || CannotPredictLoopCount;
+
+  if (LoopIsPotentiallyUnbound) {
+    IRBuilder<> Builder{&Context->back()};
+
+    std::string ReasonStr =
+        demangle(F->getName().str()) + " contains a possibly unbounded loop ";
+
+    if (HasNoExits)
+      ReasonStr += "(reason: no exit blocks).";
+    else if (CannotPredictLoopCount)
+      ReasonStr += "(reason: backedge taken count cannot be computed).";
+    else
+      assert(false);
+
+    Value *Reason = Builder.CreateGlobalStringPtr(ReasonStr);
+    insertCallBeforeInstruction(*F, Builder, "__rtsan_expect_not_realtime",
+                                {Reason});
+
+    // TODO: What is preserved here??
+    return PreservedAnalyses::none();
   }
 
   return PreservedAnalyses::all();
