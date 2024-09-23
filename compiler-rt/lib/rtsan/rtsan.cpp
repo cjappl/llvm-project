@@ -47,11 +47,12 @@ static InitializationState GetInitializationState() {
 static void RtsanAtexit() { PrintStatisticsSummary(); }
 
 static auto DefaultErrorAction(DiagnosticsInfo info) {
-  return [info]() {
+  return [info](const BufferedStackTrace &stack) {
     if (flags().print_stats_on_exit)
       IncrementTotalErrorCount();
 
     PrintDiagnostics(info);
+    stack.Print();
 
     if (flags().halt_on_error)
       Die();
@@ -115,18 +116,20 @@ __rtsan_notify_intercepted_call(const char *func_name) {
 
   __rtsan_ensure_initialized();
   GET_CALLER_PC_BP;
-  ExpectNotRealtime(GetContextForThisThread(),
-                    DefaultErrorAction({DiagnosticsInfoType::InterceptedCall,
-                                        func_name, pc, bp}));
+  ExpectNotRealtime(
+      GetContextForThisThread(),
+      DefaultErrorAction({DiagnosticsInfoType::InterceptedCall, func_name}), pc,
+      bp);
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE void
 __rtsan_notify_blocking_call(const char *func_name) {
   __rtsan_ensure_initialized();
   GET_CALLER_PC_BP;
-  ExpectNotRealtime(GetContextForThisThread(),
-                    DefaultErrorAction({DiagnosticsInfoType::BlockingCall,
-                                        func_name, pc, bp}));
+  ExpectNotRealtime(
+      GetContextForThisThread(),
+      DefaultErrorAction({DiagnosticsInfoType::BlockingCall, func_name}), pc,
+      bp);
 }
 
 } // extern "C"

@@ -25,8 +25,6 @@ enum class DiagnosticsInfoType {
 struct DiagnosticsInfo {
   DiagnosticsInfoType type;
   const char *func_name;
-  __sanitizer::uptr pc;
-  __sanitizer::uptr bp;
 };
 
 void PrintDiagnostics(const DiagnosticsInfo &info);
