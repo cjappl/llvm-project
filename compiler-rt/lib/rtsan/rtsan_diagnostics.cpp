@@ -45,15 +45,8 @@ template <class... Ts> struct Overloaded : Ts... {
 template <class... Ts> Overloaded(Ts...) -> Overloaded<Ts...>;
 } // namespace
 
-static void PrintStackTrace(uptr pc, uptr bp) {
-  BufferedStackTrace stack{};
-
-  stack.Unwind(pc, bp, nullptr, common_flags()->fast_unwind_on_fatal);
-  stack.Print();
-}
-
 static void PrintError(const Decorator &decorator,
-                       const DiagnosticsCallerInfo &info) {
+                       const DiagnosticsInfo &info) {
   const char *violation_type = std::visit(
       Overloaded{
           [](const InterceptedCallInfo &) { return "unsafe-library-call"; },
@@ -65,7 +58,7 @@ static void PrintError(const Decorator &decorator,
 }
 
 static void PrintReason(const Decorator &decorator,
-                        const DiagnosticsCallerInfo &info) {
+                        const DiagnosticsInfo &info) {
   Printf("%s", decorator.Reason());
 
   std::visit(
@@ -90,8 +83,7 @@ void __rtsan::PrintDiagnostics(const DiagnosticsInfo &info) {
   ScopedErrorReportLock l;
 
   Decorator d;
-  PrintError(d, info.call_info);
-  PrintReason(d, info.call_info);
+  PrintError(d, info);
+  PrintReason(d, info);
   Printf("%s", d.Default());
-  PrintStackTrace(info.pc, info.bp);
 }

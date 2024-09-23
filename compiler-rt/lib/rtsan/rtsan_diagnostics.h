@@ -28,15 +28,7 @@ public:
   const char *blocking_function_name_;
 };
 
-using DiagnosticsCallerInfo =
-    std::variant<InterceptedCallInfo, BlockingCallInfo>;
-
-struct DiagnosticsInfo {
-  DiagnosticsCallerInfo call_info;
-
-  __sanitizer::uptr pc;
-  __sanitizer::uptr bp;
-};
+using DiagnosticsInfo = std::variant<InterceptedCallInfo, BlockingCallInfo>;
 
 void PrintDiagnostics(const DiagnosticsInfo &info);
 } // namespace __rtsan
