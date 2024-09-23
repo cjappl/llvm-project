@@ -30,8 +30,9 @@ static void SetInitialized() {
 }
 
 static auto PrintDiagnosticsAndDieAction(DiagnosticsInfo info) {
-  return [info]() {
+  return [info](const BufferedStackTrace &stack) {
     __rtsan::PrintDiagnostics(info);
+    stack.Print();
     Die();
   };
 }
@@ -85,20 +86,20 @@ SANITIZER_INTERFACE_ATTRIBUTE void
 __rtsan_notify_intercepted_call(const char *func_name) {
   __rtsan_ensure_initialized();
   GET_CALLER_PC_BP;
-  ExpectNotRealtime(
-      GetContextForThisThread(),
-      PrintDiagnosticsAndDieAction(
-          {DiagnosticsInfoType::InterceptedCall, func_name, pc, bp}));
+  ExpectNotRealtime(GetContextForThisThread(),
+                    PrintDiagnosticsAndDieAction(
+                        {DiagnosticsInfoType::InterceptedCall, func_name}),
+                    pc, bp);
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE void
 __rtsan_notify_blocking_call(const char *func_name) {
   __rtsan_ensure_initialized();
   GET_CALLER_PC_BP;
-  ExpectNotRealtime(
-      GetContextForThisThread(),
-      PrintDiagnosticsAndDieAction(
-          {DiagnosticsInfoType::BlockingCall, func_name, pc, bp}));
+  ExpectNotRealtime(GetContextForThisThread(),
+                    PrintDiagnosticsAndDieAction(
+                        {DiagnosticsInfoType::BlockingCall, func_name}),
+                    pc, bp);
 }
 
 } // extern "C"
