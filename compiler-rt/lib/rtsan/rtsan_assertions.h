@@ -14,6 +14,9 @@
 
 #include "rtsan/rtsan.h"
 #include "rtsan/rtsan_context.h"
+#include "rtsan/rtsan_flags.h"
+#include "rtsan/rtsan_stats.h"
+
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 
@@ -27,11 +30,20 @@ void ExpectNotRealtime(Context &context, OnViolationAction &&OnViolation,
   if (context.InRealtimeContext() && !context.IsBypassed()) {
     context.BypassPush();
 
+    if (flags().print_stats_on_exit)
+      IncrementTotalErrorCount();
+
     __sanitizer::BufferedStackTrace stack;
     stack.Unwind(caller_pc, caller_bp, nullptr,
-                 /*fast*/ true);
+                 /*request_fast*/ true);
 
-    OnViolation(stack);
+    __sanitizer::StackDepotHandle handle = StackDepotPut_WithHandle(stack);
+
+    const bool is_stack_novel = handle.use_count() == 0;
+    if (UNLIKELY(is_stack_novel)) {
+      OnViolation(stack);
+      handle.inc_use_count_unsafe();
+    }
 
     context.BypassPop();
   }
