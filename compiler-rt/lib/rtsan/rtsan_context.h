@@ -37,5 +37,18 @@ private:
   int bypass_depth_{0};
 };
 
+class ScopedBypass {
+public:
+  ScopedBypass(Context& ctx) : ctx_{ctx} {ctx_.BypassPush();};
+  ~ScopedBypass () {ctx_.BypassPop();};
+
+  ScopedBypass(const ScopedBypass &) = delete;
+  ScopedBypass &operator=(const ScopedBypass &) = delete;
+  ScopedBypass(ScopedBypass &&) = delete;
+  ScopedBypass &operator=(ScopedBypass &&) = delete;
+private:
+  Context &ctx_;
+};
+
 Context &GetContextForThisThread();
 } // namespace __rtsan
