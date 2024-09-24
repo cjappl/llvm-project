@@ -49,7 +49,7 @@ static void RtsanAtexit() { PrintStatisticsSummary(); }
 static auto DefaultErrorAction(DiagnosticsInfo info) {
   return [info](const BufferedStackTrace &stack) {
     if (flags().print_stats_on_exit)
-      IncrementTotalErrorCount();
+      IncrementUniqueErrorCount();
 
     PrintDiagnostics(info);
     stack.Print();
