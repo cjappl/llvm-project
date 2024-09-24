@@ -29,7 +29,7 @@ static void SetInitialized() {
   atomic_store(&rtsan_initialized, 1, memory_order_release);
 }
 
-static auto DefaultErrorAction(const DiagnosticsInfo& info) {
+static auto PrintDiagnosticsAndDieAction(const DiagnosticsInfo& info) {
   return [&info](const BufferedStackTrace &stack) {
     PrintDiagnostics(info);
     stack.Print();
@@ -88,7 +88,7 @@ __rtsan_notify_intercepted_call(const char *func_name) {
   GET_CALLER_PC_BP;
   ExpectNotRealtime(
       GetContextForThisThread(),
-      DefaultErrorAction(InterceptedCallInfo{func_name}),
+      PrintDiagnosticsAndDieAction(InterceptedCallInfo{func_name}),
       pc, bp);
 }
 
@@ -98,7 +98,7 @@ __rtsan_notify_blocking_call(const char *func_name) {
   GET_CALLER_PC_BP;
    ExpectNotRealtime(
       GetContextForThisThread(),
-      DefaultErrorAction(BlockingCallInfo{func_name}),
+      PrintDiagnosticsAndDieAction(BlockingCallInfo{func_name}),
       pc, bp);
 }
 

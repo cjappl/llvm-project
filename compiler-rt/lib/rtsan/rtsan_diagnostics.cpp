@@ -11,7 +11,6 @@
 #include "rtsan/rtsan_diagnostics.h"
 
 #include "sanitizer_common/sanitizer_flags.h"
-#include "sanitizer_common/sanitizer_report_decorator.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 
 using namespace __sanitizer;
@@ -31,59 +30,41 @@ void BufferedStackTrace::UnwindImpl(uptr pc, uptr bp, void *context,
 } // namespace __sanitizer
 
 namespace {
-class Decorator : public __sanitizer::SanitizerCommonDecorator {
-public:
-  Decorator() : SanitizerCommonDecorator() {}
-  const char *FunctionName() const { return Green(); }
-  const char *Reason() const { return Blue(); }
-};
-
-template <class... Ts> struct Overloaded : Ts... {
-  using Ts::operator()...;
-};
-// TODO: Remove below when c++20
-template <class... Ts> Overloaded(Ts...) -> Overloaded<Ts...>;
 } // namespace
 
-static void PrintError(const Decorator &decorator,
-                       const DiagnosticsInfo &info) {
-  const char *violation_type = std::visit(
-      Overloaded{
-          [](const InterceptedCallInfo &) { return "unsafe-library-call"; },
-          [](const BlockingCallInfo &) { return "blocking-call"; }},
-      info);
+__rtsan::InterceptedCallInfo::InterceptedCallInfo(
+    const char *intercepted_function_name)
+    : intercepted_function_name_(intercepted_function_name) {}
 
-  Printf("%s", decorator.Error());
-  Report("ERROR: RealtimeSanitizer: %s\n", violation_type);
+void __rtsan::InterceptedCallInfo::PrintError(Decorator &d) const {
+  Report("ERROR: RealtimeSanitizer: unsafe-library-call\n");
 }
 
-static void PrintReason(const Decorator &decorator,
-                        const DiagnosticsInfo &info) {
-  Printf("%s", decorator.Reason());
+void __rtsan::InterceptedCallInfo::PrintReason(Decorator &d) const {
+  Printf("Intercepted call to real-time unsafe function "
+          "`%s%s%s` in real-time context!\n",
+          d.FunctionName(),
+          intercepted_function_name_, d.Reason());
+}
 
-  std::visit(
-      Overloaded{[decorator](const InterceptedCallInfo &call) {
-                   Printf("Intercepted call to real-time unsafe function "
-                          "`%s%s%s` in real-time context!",
-                          decorator.FunctionName(),
-                          call.intercepted_function_name_, decorator.Reason());
-                 },
-                 [decorator](const BlockingCallInfo &arg) {
-                   Printf("Call to blocking function "
-                          "`%s%s%s` in real-time context!",
-                          decorator.FunctionName(), arg.blocking_function_name_,
-                          decorator.Reason());
-                 }},
-      info);
+__rtsan::BlockingCallInfo::BlockingCallInfo(const char *blocking_function_name)
+    : blocking_function_name_(blocking_function_name) {}
 
-  Printf("\n");
+void __rtsan::BlockingCallInfo::PrintError(Decorator &d) const {
+  Report("ERROR: RealtimeSanitizer: blocking-call\n");
+}
+
+void __rtsan::BlockingCallInfo::PrintReason(Decorator &d) const {
+  Printf("Call to blocking function "
+          "`%s%s%s` in real-time context!\n",
+          d.FunctionName(), blocking_function_name_, d.Reason());
 }
 
 void __rtsan::PrintDiagnostics(const DiagnosticsInfo &info) {
   ScopedErrorReportLock l;
 
   Decorator d;
-  PrintError(d, info);
-  PrintReason(d, info);
+  info.PrintError(d);
+  info.PrintReason(d);
   Printf("%s", d.Default());
 }
