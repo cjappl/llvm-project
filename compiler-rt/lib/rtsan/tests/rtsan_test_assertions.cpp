@@ -17,6 +17,7 @@
 #include <gmock/gmock.h>
 
 using namespace __rtsan;
+using namespace __sanitizer;
 
 class TestRtsanAssertions : public ::testing::Test {
 protected:
@@ -25,9 +26,10 @@ protected:
 
 static void ExpectViolationAction(__rtsan::Context &context,
                                   bool expect_violation_callback) {
-  ::testing::MockFunction<void()> mock_on_violation;
+  ::testing::MockFunction<void(const BufferedStackTrace &)> mock_on_violation;
   EXPECT_CALL(mock_on_violation, Call).Times(expect_violation_callback ? 1 : 0);
-  ExpectNotRealtime(context, mock_on_violation.AsStdFunction());
+  GET_CALLER_PC_BP;
+  ExpectNotRealtime(context, mock_on_violation.AsStdFunction(), pc, bp);
 }
 
 TEST_F(TestRtsanAssertions,

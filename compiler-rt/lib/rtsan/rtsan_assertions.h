@@ -14,15 +14,25 @@
 
 #include "rtsan/rtsan.h"
 #include "rtsan/rtsan_context.h"
+#include "sanitizer_common/sanitizer_stackdepot.h"
+#include "sanitizer_common/sanitizer_stacktrace.h"
 
 namespace __rtsan {
 
 template <typename OnViolationAction>
-void ExpectNotRealtime(Context &context, OnViolationAction &&OnViolation) {
+void ExpectNotRealtime(Context &context, OnViolationAction &&OnViolation,
+                       __sanitizer::uptr caller_pc,
+                       __sanitizer::uptr caller_bp) {
   CHECK(__rtsan_is_initialized());
   if (context.InRealtimeContext() && !context.IsBypassed()) {
     context.BypassPush();
-    OnViolation();
+
+    __sanitizer::BufferedStackTrace stack;
+    stack.Unwind(caller_pc, caller_bp, nullptr,
+                 /*fast*/ true);
+
+    OnViolation(stack);
+
     context.BypassPop();
   }
 }
