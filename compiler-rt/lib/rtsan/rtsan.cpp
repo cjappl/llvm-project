@@ -21,6 +21,9 @@
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 
+#include <tuple>
+#include <utility>
+
 using namespace __rtsan;
 using namespace __sanitizer;
 
@@ -46,10 +49,27 @@ static InitializationState GetInitializationState() {
       atomic_load(&rtsan_initialized, memory_order_acquire));
 }
 
-static auto OnViolationAction(DiagnosticsInfo info) {
-  return [info]() {
-    IncrementTotalErrorCount();
+template <class ...PairTypes>
+constexpr static decltype(auto) BuildErrorAction(PairTypes&&... pairs) {
+    return [actions = std::tuple(std::forward<PairTypes>(pairs)...)]() {
+        std::apply([](auto&&... action_pair) {
+            ((action_pair.second ? action_pair.first() : void()), ...);
+        }, actions);
+    };
+}
 
+template <typename Callable>
+constexpr decltype(auto) OptionallyCall(Callable&& action, bool condition) {
+    return std::make_pair(std::forward<Callable>(action), condition);
+}
+
+template <typename Callable>
+constexpr decltype(auto) AlwaysCall(Callable&& action) {
+    return OptionallyCall(std::forward<Callable>(action), true);
+ }
+
+void StoreStackAndPrintIfNovel(const DiagnosticsInfo& info)
+{
     BufferedStackTrace stack;
 
     // We use the unwind_on_fatal flag here because of precedent with other
@@ -74,10 +94,6 @@ static auto OnViolationAction(DiagnosticsInfo info) {
 
       handle.inc_use_count_unsafe();
     }
-
-    if (flags().halt_on_error)
-      Die();
-  };
 }
 
 extern "C" {
@@ -137,18 +153,29 @@ __rtsan_notify_intercepted_call(const char *func_name) {
 
   __rtsan_ensure_initialized();
   GET_CALLER_PC_BP;
+  DiagnosticsInfoType type = DiagnosticsInfoType::InterceptedCall;
   ExpectNotRealtime(GetContextForThisThread(),
-                    OnViolationAction({DiagnosticsInfoType::InterceptedCall,
-                                       func_name, pc, bp}));
+      BuildErrorAction(
+        AlwaysCall(IncrementTotalErrorCount),
+        AlwaysCall([=]() {StoreStackAndPrintIfNovel({type, func_name, pc, bp});}),
+        OptionallyCall(Die, flags().halt_on_error)
+        )
+      );
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE void
 __rtsan_notify_blocking_call(const char *func_name) {
   __rtsan_ensure_initialized();
   GET_CALLER_PC_BP;
+
+  DiagnosticsInfoType type = DiagnosticsInfoType::BlockingCall;
   ExpectNotRealtime(GetContextForThisThread(),
-                    OnViolationAction({DiagnosticsInfoType::BlockingCall,
-                                       func_name, pc, bp}));
+      BuildErrorAction(
+        AlwaysCall(IncrementTotalErrorCount),
+        AlwaysCall([=]() {StoreStackAndPrintIfNovel({type, func_name, pc, bp});}),
+        OptionallyCall(Die, flags().halt_on_error)
+        )
+      );
 }
 
 } // extern "C"
