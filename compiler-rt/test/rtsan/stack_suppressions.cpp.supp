@@ -1,0 +1,4 @@
+function-call:MallocViolation
+function-call:std::*vector
+
+interceptor:free

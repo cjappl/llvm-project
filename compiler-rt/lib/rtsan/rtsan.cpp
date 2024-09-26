@@ -14,6 +14,7 @@
 #include "rtsan/rtsan_flags.h"
 #include "rtsan/rtsan_interceptors.h"
 #include "rtsan/rtsan_stats.h"
+#include "rtsan/rtsan_suppressions.h"
 
 #include "sanitizer_common/sanitizer_atomic.h"
 #include "sanitizer_common/sanitizer_common.h"
@@ -48,14 +49,17 @@ static InitializationState GetInitializationState() {
 
 static auto OnViolationAction(DiagnosticsInfo info) {
   return [info]() {
-    IncrementTotalErrorCount();
-
     BufferedStackTrace stack;
 
     // We use the unwind_on_fatal flag here because of precedent with other
     // sanitizers, this action is not necessarily fatal if halt_on_error=false
     stack.Unwind(info.pc, info.bp, nullptr,
                  common_flags()->fast_unwind_on_fatal);
+
+    if (IsStackTraceSuppressed(stack))
+      return;
+
+    IncrementTotalErrorCount();
 
     // If in the future we interop with other sanitizers, we will
     // need to make our own stackdepot
@@ -89,6 +93,8 @@ SANITIZER_INTERFACE_ATTRIBUTE void __rtsan_init() {
   SanitizerToolName = "RealtimeSanitizer";
   InitializeFlags();
   InitializeInterceptors();
+
+  InitializeSuppressions();
 
   if (flags().print_stats_on_exit)
     Atexit(PrintStatisticsSummary);
@@ -136,6 +142,10 @@ __rtsan_notify_intercepted_call(const char *func_name) {
     return;
 
   __rtsan_ensure_initialized();
+
+  if (IsInterceptorSuppressed(func_name))
+    return;
+
   GET_CALLER_PC_BP;
   ExpectNotRealtime(GetContextForThisThread(),
                     OnViolationAction({DiagnosticsInfoType::InterceptedCall,
