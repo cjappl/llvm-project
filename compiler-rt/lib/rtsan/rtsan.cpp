@@ -71,6 +71,7 @@ static auto OnViolationAction(DiagnosticsInfo info) {
 
       PrintDiagnostics(info);
       stack.Print();
+      PrintErrorSummary(info, stack);
 
       handle.inc_use_count_unsafe();
     }
