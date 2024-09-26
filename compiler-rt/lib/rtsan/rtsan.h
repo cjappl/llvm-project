@@ -45,6 +45,5 @@ SANITIZER_INTERFACE_ATTRIBUTE void __rtsan_enable();
 SANITIZER_INTERFACE_ATTRIBUTE void
 __rtsan_notify_intercepted_call(const char *intercepted_function_name);
 
-SANITIZER_INTERFACE_ATTRIBUTE void
-__rtsan_notify_blocking_call(const char *blocking_function_name);
+SANITIZER_INTERFACE_ATTRIBUTE void __rtsan_notify_blocking_call();
 } // extern "C"
