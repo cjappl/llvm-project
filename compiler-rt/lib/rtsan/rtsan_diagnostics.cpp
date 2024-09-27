@@ -13,6 +13,8 @@
 #include "sanitizer_common/sanitizer_flags.h"
 #include "sanitizer_common/sanitizer_report_decorator.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
+#include "sanitizer_common/sanitizer_stacktrace_printer.h"
+#include "sanitizer_common/sanitizer_symbolizer.h"
 
 using namespace __sanitizer;
 using namespace __rtsan;
@@ -67,9 +69,32 @@ static void PrintReason(const Decorator &decorator,
     break;
   }
   case DiagnosticsInfoType::BlockingCall: {
-    Printf("Call to blocking function "
-           "`%s%s%s` in real-time context!",
-           decorator.FunctionName(), info.func_name, decorator.Reason());
+    InternalScopedString buffer;
+    SymbolizedStack *stack = Symbolizer::GetOrInit()->SymbolizePC(info.pc);
+    AddressInfo &top_frame = stack->info;
+
+    buffer.Append("Real-time unsafe call to blocking function ");
+    buffer.Append("`");
+    buffer.AppendF("%s", decorator.FunctionName());
+
+    // This basically decides if we are symbolized or not
+    // In the case of symbolized, function will be valid and we will print
+    //      `some_blocking_function()`
+    // In the case of not symbolized, function will be nullpltr and we will
+    // print the source location:
+    //      `(/full/path/to/src.cpp:arm64+0x10003ee0)`
+    // This mirrors what the stack does on symbolized and not symbolized
+    const char *format = top_frame.function ? "%f" : "%L";
+
+    StackTracePrinter::GetOrInit()->RenderFrame(
+        &buffer, format, 0, top_frame.address, &top_frame,
+        common_flags()->symbolize_vs_style, common_flags()->strip_path_prefix);
+
+    buffer.AppendF("%s", decorator.Reason());
+    buffer.Append("`");
+
+    Printf("%s", buffer.data());
+
     break;
   }
   }

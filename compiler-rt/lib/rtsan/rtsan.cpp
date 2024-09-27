@@ -142,13 +142,12 @@ __rtsan_notify_intercepted_call(const char *func_name) {
                                        func_name, pc, bp}));
 }
 
-SANITIZER_INTERFACE_ATTRIBUTE void
-__rtsan_notify_blocking_call(const char *func_name) {
+SANITIZER_INTERFACE_ATTRIBUTE void __rtsan_notify_blocking_call() {
   __rtsan_ensure_initialized();
   GET_CALLER_PC_BP;
   ExpectNotRealtime(GetContextForThisThread(),
                     OnViolationAction({DiagnosticsInfoType::BlockingCall,
-                                       func_name, pc, bp}));
+                                       "GARBAGE REMOVE ME", pc, bp}));
 }
 
 } // extern "C"
