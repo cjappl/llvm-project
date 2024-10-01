@@ -18,7 +18,7 @@
 namespace __rtsan {
 
 void InitializeSuppressions();
-bool IsStackTraceSuppressed(const __sanitizer::StackTrace& stack);
+bool IsStackTraceSuppressed(const __sanitizer::StackTrace &stack);
 bool IsInterceptorSuppressed(const char *interceptor_name);
 
 } // namespace __rtsan

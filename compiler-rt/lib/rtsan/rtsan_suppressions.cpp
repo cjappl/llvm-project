@@ -62,7 +62,8 @@ void __rtsan::InitializeSuppressions() {
 bool __rtsan::IsStackTraceSuppressed(const StackTrace &stack) {
   CHECK(suppression_ctx);
 
-  const char *function_call_type = ConvertTypeToFlagName(ErrorType::FunctionCall);
+  const char *function_call_type =
+      ConvertTypeToFlagName(ErrorType::FunctionCall);
   if (!suppression_ctx->HasSuppressionType(function_call_type))
     return false;
 
