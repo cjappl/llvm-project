@@ -21,6 +21,7 @@
 #include "sanitizer_common/sanitizer_mutex.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "ubsan/ubsan_init.h"
+#include "ubsan/ubsan_monitor.h"
 
 using namespace __rtsan;
 using namespace __sanitizer;
@@ -172,3 +173,11 @@ void __sanitizer_print_stack_trace() {
 }
 
 } // extern "C"
+
+SANITIZER_INTERFACE_ATTRIBUTE void __ubsan::__ubsan_on_report_begin() {
+  __rtsan_disable();
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE void __ubsan::__ubsan_on_report_end() {
+  __rtsan_enable();
+}

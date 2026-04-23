@@ -389,7 +389,9 @@ ScopedReport::Initializer::Initializer() { InitAsStandaloneIfNecessary(); }
 
 ScopedReport::ScopedReport(ReportOptions Opts, Location SummaryLoc,
                            ErrorType Type)
-    : Opts(Opts), SummaryLoc(SummaryLoc), Type(Type) {}
+    : Opts(Opts), SummaryLoc(SummaryLoc), Type(Type) {
+  __ubsan_on_report_begin();
+}
 
 ScopedReport::~ScopedReport() {
   MaybePrintStackTrace(Opts.pc, Opts.bp);
@@ -397,6 +399,8 @@ ScopedReport::~ScopedReport() {
 
   if (common_flags()->print_module_map >= 2)
     DumpProcessMap();
+
+  __ubsan_on_report_end();
 
   if (flags()->halt_on_error)
     Die();

@@ -34,6 +34,12 @@ RegisterUndefinedBehaviorReport(UndefinedBehaviorReport *UBR);
 /// that a UB report is available.
 extern "C" SANITIZER_INTERFACE_ATTRIBUTE void __ubsan_on_report(void);
 
+/// Called when a UBSan report scope begins.
+extern "C" SANITIZER_INTERFACE_ATTRIBUTE void __ubsan_on_report_begin(void);
+
+/// Called when a UBSan report scope ends.
+extern "C" SANITIZER_INTERFACE_ATTRIBUTE void __ubsan_on_report_end(void);
+
 /// Used by the monitor process to extract information from a UB report. The
 /// data is only available until the next time __ubsan_on_report is called. The
 /// caller is responsible for copying and preserving the data if needed.

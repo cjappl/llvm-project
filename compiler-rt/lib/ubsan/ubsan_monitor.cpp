@@ -39,6 +39,12 @@ void __ubsan::RegisterUndefinedBehaviorReport(UndefinedBehaviorReport *UBR) {
 SANITIZER_WEAK_DEFAULT_IMPL
 void __ubsan::__ubsan_on_report(void) {}
 
+SANITIZER_WEAK_DEFAULT_IMPL
+void __ubsan::__ubsan_on_report_begin(void) {}
+
+SANITIZER_WEAK_DEFAULT_IMPL
+void __ubsan::__ubsan_on_report_end(void) {}
+
 void __ubsan::__ubsan_get_current_report_data(const char **OutIssueKind,
                                               const char **OutMessage,
                                               const char **OutFilename,

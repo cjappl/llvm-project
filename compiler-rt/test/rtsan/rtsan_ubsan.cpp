@@ -14,18 +14,16 @@ __attribute__((noinline)) int TriggerUbsan() {
   return max + 1;
 }
 
-void TriggerRtsan(int overflowed) [[clang::nonblocking]] {
-  void *ptr = malloc(2);
-  printf("ptr=%p\n", ptr, overflowed);
+void TriggerRtsan() [[clang::nonblocking]] {
+  int overflowed = TriggerUbsan();
+  printf("overflowed=%d\n", overflowed);
 }
 
 int main() {
-  int overflowed = TriggerUbsan();
-  TriggerRtsan(overflowed);
+  TriggerRtsan();
   return 0;
 }
 
 // CHECK: runtime error: signed integer overflow
-// CHECK: ==ERROR: RealtimeSanitizer: unsafe-library-call
-// CHECK-NEXT: Intercepted call to real-time unsafe function `malloc` in real-time context!
+// CHECK: Intercepted call to real-time unsafe function `malloc` in real-time context!
 // CHECK: SUMMARY: RealtimeSanitizer: unsafe-library-call
